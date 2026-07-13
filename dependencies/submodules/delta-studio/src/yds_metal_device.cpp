@@ -19,6 +19,11 @@
 
 
 #include <vector>
+#include <cstdlib>
+#include <cstdint>
+#include <cstdio>
+#include <objc/runtime.h>
+#include <objc/message.h>
 
 
 ysMetalDevice::ysMetalDevice() : ysDevice(ysContextObject::DeviceAPI::Metal){
@@ -59,7 +64,13 @@ ysError ysMetalDevice::CreateRenderingContext(ysRenderingContext **renderingCont
     *renderingContext = nullptr;
     ysSdlWindow *sdlWindow = static_cast<ysSdlWindow *>(window);
     swapchain = (CA::MetalLayer*)SDL_RenderGetMetalLayer(sdlWindow->GetRenderer());
-    
+    // Allow reading back the drawable texture (used by the env-var-gated frame capture
+    // in Present(); harmless otherwise). The vendored metal-cpp CAMetalLayer binding
+    // doesn't expose setFramebufferOnly:, so send the selector via the Obj-C runtime —
+    // a metal-cpp object pointer is its underlying Obj-C id.
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(
+        (id)swapchain, sel_registerName("setFramebufferOnly:"), NO);
+
     auto device = swapchain->device();
     m_drawable = swapchain->nextDrawable();
     auto name = device->name();
@@ -187,8 +198,57 @@ ysError ysMetalDevice::ClearBuffers(const float *_clearColor) {
 ysError ysMetalDevice::Present() {
     YDS_ERROR_DECLARE("Present");
     pEnc->endEncoding();
+
+    // Env-var-gated offscreen frame capture. Set REDLINE_CAPTURE=<path> to dump one
+    // frame (default frame 90; override with REDLINE_CAPTURE_FRAME) as raw BGRA8:
+    //   int32 width, int32 height, then width*height*4 bytes.
+    // Lets us verify the render without macOS Screen-Recording permission — the app
+    // reads back its own drawable. No-op when the variable is unset.
+    static int s_redlineFrame = 0;
+    ++s_redlineFrame;
+    const char *redlineCapPath = std::getenv("REDLINE_CAPTURE");
+    const int redlineCapFrame =
+        std::getenv("REDLINE_CAPTURE_FRAME") ? std::atoi(std::getenv("REDLINE_CAPTURE_FRAME")) : 90;
+    MTL::Texture *redlineCapTex = nullptr;
+    if (redlineCapPath != nullptr && s_redlineFrame == redlineCapFrame) {
+        MTL::Texture *src = m_drawable->texture();
+        MTL::TextureDescriptor *td = MTL::TextureDescriptor::alloc()->init();
+        td->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+        td->setWidth(src->width());
+        td->setHeight(src->height());
+        td->setStorageMode(MTL::StorageModeShared);
+        td->setUsage(MTL::TextureUsageShaderRead);
+        redlineCapTex = m_device->newTexture(td);
+        td->release();
+        MTL::BlitCommandEncoder *blit = pCmd->blitCommandEncoder();
+        blit->copyFromTexture(src, 0, 0, MTL::Origin(0, 0, 0),
+                              MTL::Size(src->width(), src->height(), 1),
+                              redlineCapTex, 0, 0, MTL::Origin(0, 0, 0));
+        blit->endEncoding();
+    }
+
     pCmd->presentDrawable( m_drawable );
     pCmd->commit();
+
+    if (redlineCapTex != nullptr) {
+        pCmd->waitUntilCompleted();
+        const int cw = (int)redlineCapTex->width();
+        const int ch = (int)redlineCapTex->height();
+        std::vector<uint8_t> pixels((size_t)cw * ch * 4);
+        redlineCapTex->getBytes(pixels.data(), (NS::UInteger)(cw * 4),
+                                MTL::Region::Make2D(0, 0, cw, ch), 0);
+        FILE *f = std::fopen(redlineCapPath, "wb");
+        if (f != nullptr) {
+            int32_t hdr[2] = { cw, ch };
+            std::fwrite(hdr, sizeof(int32_t), 2, f);
+            std::fwrite(pixels.data(), 1, pixels.size(), f);
+            std::fclose(f);
+            printf("[redline] captured frame %d -> %s (%dx%d)\n",
+                   s_redlineFrame, redlineCapPath, cw, ch);
+            fflush(stdout);
+        }
+        redlineCapTex->release();
+    }
     m_drawable->release();
     m_drawable = swapchain->nextDrawable();
     pCmd = MTL::make_owned(m_queue->commandBuffer());
