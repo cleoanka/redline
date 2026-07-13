@@ -163,19 +163,95 @@ ysError ysMetalDevice::CreateOffScreenRenderTarget(ysRenderTarget **newTarget, i
 }
 
 ysError ysMetalDevice::CreateSubRenderTarget(ysRenderTarget **newTarget, ysRenderTarget *parent, int x, int y, int width, int height) {
-    return ysError();
+    YDS_ERROR_DECLARE("CreateSubRenderTarget");
+
+    if (newTarget == nullptr) return YDS_ERROR_RETURN(ysError::InvalidParameter);
+    if (parent == nullptr) return YDS_ERROR_RETURN(ysError::InvalidParameter);
+    if (parent->GetType() == ysRenderTarget::Type::Subdivision) return YDS_ERROR_RETURN(ysError::InvalidParameter);
+
+    // A subdivision target is a viewport region into its parent (the on-screen drawable).
+    ysMetalRenderTarget *newRenderTarget = m_renderTargets.NewGeneric<ysMetalRenderTarget>();
+    newRenderTarget->m_type = ysRenderTarget::Type::Subdivision;
+    newRenderTarget->m_posX = x;
+    newRenderTarget->m_posY = y;
+    newRenderTarget->m_width = width;
+    newRenderTarget->m_height = height;
+    newRenderTarget->m_physicalWidth = width;
+    newRenderTarget->m_physicalHeight = height;
+    newRenderTarget->m_format = ysRenderTarget::Format::R8G8B8A8_UNORM;
+    newRenderTarget->m_hasDepthBuffer = parent->HasDepthBuffer();
+    newRenderTarget->m_associatedContext = parent->GetAssociatedContext();
+    newRenderTarget->m_parent = parent;
+
+    *newTarget = static_cast<ysRenderTarget *>(newRenderTarget);
+    return YDS_ERROR_RETURN(ysError::None);
 }
 
 ysError ysMetalDevice::ResizeRenderTarget(ysRenderTarget *target, int width, int height, int pwidth, int pheight) {
-    return ysError();
+    YDS_ERROR_DECLARE("ResizeRenderTarget");
+    // No GPU resource to rebuild for on-screen/subdivision targets — just update the
+    // stored dimensions (the base implementation), which drive the viewport in
+    // SetRenderTarget.
+    return ysDevice::ResizeRenderTarget(target, width, height, pwidth, pheight);
 }
 
 ysError ysMetalDevice::DestroyRenderTarget(ysRenderTarget *&target) {
     return ysError();
 }
 
-ysError ysMetalDevice::SetRenderTarget(ysRenderTarget *target) {
-    return ysError();
+ysError ysMetalDevice::SetRenderTarget(ysRenderTarget *target, int slot) {
+    YDS_ERROR_DECLARE("SetRenderTarget");
+
+    m_activeRenderTarget[slot] = target;
+    if (target == nullptr || pEnc == nullptr) return YDS_ERROR_RETURN(ysError::None);
+    if (slot != 0) return YDS_ERROR_RETURN(ysError::None);
+
+    // Map this target to a viewport into the current drawable. On-screen targets cover the
+    // whole drawable; subdivision targets (e.g. the engine view) cover their sub-region.
+    // Metal, like DirectX, uses a top-left origin, and the application has already stored
+    // posX/posY in top-left space, so no Y-flip is needed here.
+    const int drawableW = (m_drawable != nullptr) ? (int)m_drawable->texture()->width() : 0;
+    const int drawableH = (m_drawable != nullptr) ? (int)m_drawable->texture()->height() : 0;
+
+    int px = target->GetPosX();
+    int py = target->GetPosY();
+    int pw = target->GetPhysicalWidth();
+    int ph = target->GetPhysicalHeight();
+
+    // Before the target has been sized, or for the on-screen target, cover the drawable.
+    if (target->GetType() != ysRenderTarget::Type::Subdivision || pw <= 0 || ph <= 0) {
+        px = 0; py = 0;
+        pw = (drawableW > 0) ? drawableW : pw;
+        ph = (drawableH > 0) ? drawableH : ph;
+    }
+
+    MTL::Viewport viewport;
+    viewport.originX = (double)px;
+    viewport.originY = (double)py;
+    viewport.width = (double)pw;
+    viewport.height = (double)ph;
+    viewport.znear = 0.0;
+    viewport.zfar = 1.0;
+    pEnc->setViewport(viewport);
+
+    // Clamp a scissor rectangle to the drawable so rasterisation is confined to the region.
+    if (drawableW > 0 && drawableH > 0) {
+        int sx = px < 0 ? 0 : px;
+        int sy = py < 0 ? 0 : py;
+        int sw = pw, sh = ph;
+        if (sx + sw > drawableW) sw = drawableW - sx;
+        if (sy + sh > drawableH) sh = drawableH - sy;
+        if (sw > 0 && sh > 0) {
+            MTL::ScissorRect scissor;
+            scissor.x = (NS::UInteger)sx;
+            scissor.y = (NS::UInteger)sy;
+            scissor.width = (NS::UInteger)sw;
+            scissor.height = (NS::UInteger)sh;
+            pEnc->setScissorRect(scissor);
+        }
+    }
+
+    return YDS_ERROR_RETURN(ysError::None);
 }
 
 ysError ysMetalDevice::SetDepthTestEnabled(ysRenderTarget *target, bool enable) {
