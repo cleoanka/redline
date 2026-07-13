@@ -1,5 +1,8 @@
 #include "../include/yds_sdl_window.h"
 
+#include <algorithm>
+#include <cmath>
+
 ysSdlWindow::ysSdlWindow() : ysWindow(Platform::Sdl) {
     /* void */
 }
@@ -35,10 +38,44 @@ ysError ysSdlWindow::InitializeWindow(ysWindow *parent, std::string title, Windo
         // do nothing
         break;
     }
+    // Fit a window requested larger than the display into the usable area (menu bar and
+    // Dock excluded), preserving aspect ratio, and centre it. Without this a fixed
+    // 1920x1080 window opens partly or wholly off-screen on smaller Retina displays
+    // (e.g. a 14" MacBook Pro at 1512x982 points) — the "window goes off the edge" bug.
+    if (style == WindowStyle::Windowed) {
+        SDL_Rect usable;
+        if (SDL_GetDisplayUsableBounds(0, &usable) == 0 && usable.w > 0 && usable.h > 0) {
+            const float scale = std::min(1.0f,
+                std::min((float)usable.w / (float)width, (float)usable.h / (float)height));
+            width  = (int)std::round(width  * scale);
+            height = (int)std::round(height * scale);
+            x = usable.x + (usable.w - width) / 2;
+            y = usable.y + (usable.h - height) / 2;
+        }
+    }
+
     SDL_SetHint(SDL_HINT_RENDER_DRIVER, "metal");
     // TODO: choose between VULKAN and OPENGL here
     m_window = SDL_CreateWindow(title.c_str(), x, y, width, height, SDL_WINDOW_METAL | SDL_WINDOW_ALLOW_HIGHDPI);
     m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED);
+
+    // Report the *actual* Metal drawable size (in pixels) as the screen resolution so the
+    // application's projection and UI layout match what Metal renders. On a Retina display
+    // the drawable is 2x the window's point size; leaving m_width/m_height at the requested
+    // (point) size is what makes the engine view render oversized.
+    if (m_renderer != nullptr) {
+        int drawableWidth = width;
+        int drawableHeight = height;
+        if (SDL_GetRendererOutputSize(m_renderer, &drawableWidth, &drawableHeight) == 0
+                && drawableWidth > 0 && drawableHeight > 0) {
+            m_width = drawableWidth;
+            m_height = drawableHeight;
+        }
+    }
+
+    printf("[redline] window placed=(%d,%d) size(pts)=%dx%d drawable(px)=%dx%d\n",
+           x, y, width, height, m_width, m_height);
+    fflush(stdout);
 
     return YDS_ERROR_RETURN(ysError::None);
 }
