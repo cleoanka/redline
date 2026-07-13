@@ -25,6 +25,9 @@ void es_script::Compiler::initialize() {
     m_compiler->addSearchPath("../../es/");
     m_compiler->addSearchPath("../es/");
     m_compiler->addSearchPath("es/");
+    // Inside redline.app the working directory is Contents/MacOS/, so the script library
+    // (es/) is bundled at Contents/Resources/es/.
+    m_compiler->addSearchPath("../Resources/es/");
 
     m_rules.initialize();
 }

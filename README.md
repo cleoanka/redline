@@ -24,9 +24,9 @@ CMake 4 / Apple clang 21 / Boost 1.90**, fixes those bugs, and develops it furth
 ## Status
 
 - ✅ Builds & runs on Apple Silicon, macOS 26 (Tahoe), CMake 4.2, Apple clang 21.
-- 🚧 Fixing the inherited HiDPI rendering bugs (oversized view, off-screen window,
-  valve/cam artifacts).
-- ⬜ `.app` bundle + new features.
+- ✅ All three inherited rendering bugs fixed — off-screen window, oversized engine
+  view, and the scrambled engine cross-section (see `docs/screenshot_current.png`).
+- 🚧 `.app` bundle + new features.
 
 ## Build (Apple Silicon, macOS)
 
