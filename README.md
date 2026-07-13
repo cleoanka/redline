@@ -26,7 +26,7 @@ CMake 4 / Apple clang 21 / Boost 1.90**, fixes those bugs, and develops it furth
 - ✅ Builds & runs on Apple Silicon, macOS 26 (Tahoe), CMake 4.2, Apple clang 21.
 - ✅ All three inherited rendering bugs fixed — off-screen window, oversized engine
   view, and the scrambled engine cross-section (see `docs/screenshot_current.png`).
-- 🚧 `.app` bundle + new features.
+- ✅ Double-clickable `redline.app` bundle with an app icon (`scripts/make_app.sh`).
 
 ## Build (Apple Silicon, macOS)
 
@@ -41,6 +41,13 @@ cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.
 cmake --build build --target engine-sim-app -j
 
 cd build && ./engine-sim-app     # run from build/ so it finds ../assets
+```
+
+### Package as a double-clickable app
+
+```sh
+scripts/make_app.sh              # -> dist/redline.app
+open dist/redline.app            # or double-click it in Finder
 ```
 
 ## Controls

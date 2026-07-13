@@ -11,6 +11,11 @@ All notable changes to redline. Format loosely follows Keep a Changelog.
 - Env-var-gated Metal frame capture (`REDLINE_CAPTURE` / `REDLINE_CAPTURE_FRAME`):
   the app reads back its own drawable and dumps a raw BGRA8 frame, so the render can
   be verified headlessly without macOS Screen-Recording permission.
+- **Double-clickable `redline.app` bundle** via `scripts/make_app.sh` (binary +
+  assets + `es/` script library + engine fonts/shaders + `Info.plist` + ad-hoc
+  codesign). The app now `chdir`s to its own directory at startup and resolves assets
+  through a bundled `delta.conf`, so it launches from Finder as well as the CLI
+  (the Apple port was command-line-only). Includes a tachometer app icon.
 
 ### Fixed (all three of the Apple port's known rendering bugs)
 - **Off-screen window**: a fixed 1920x1080 window opened partly off-screen on smaller
