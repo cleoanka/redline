@@ -4,6 +4,17 @@ All notable changes to redline. Format loosely follows Keep a Changelog.
 
 ## [Unreleased]
 
+### Fixed
+- **Random crash after a few seconds (heap corruption).** The Metal `ResizeRenderTarget`
+  (called every frame from the engine-view camera path) ran `YDS_ERROR_DECLARE` — which
+  pushes onto delta-studio's error call-stack — but returned without `YDS_ERROR_RETURN`,
+  which pops. So `ysErrorSystem::m_stackLevel` leaked ~1 level/frame and overflowed
+  `m_callStack` within seconds, corrupting the heap (surfacing as bad-access / malloc /
+  SF-Symbol crashes, e.g. on window focus changes). Fixed the imbalance and hardened
+  `StackRaise` with a bounds check so no future raise/descend imbalance can corrupt the
+  heap. Verified with AddressSanitizer (30 s clean; was <5 s to overflow) and a 45 s
+  idle+focus-change stress test.
+
 ### Added
 - Project docs: `docs/DESIGN.md`, `NOTICE`, this changelog; redline README.
 - CMake `DELTA_BUILD_DEMOS` option (default OFF) so delta-studio's large, unrelated
