@@ -1,0 +1,27 @@
+redline
+Copyright 2026 cleoanka
+
+This product is a fork of and includes software from the following open-source
+projects. All are used under their respective licenses (MIT), whose full texts are
+retained in this repository. The original copyright notices are preserved.
+
+- engine-sim — © 2022 AngeTheGreat (Ange Yaghi)
+  https://github.com/ange-yaghi/engine-sim
+  (also the source of the bundled delta-studio, piranha, simple-2d-constraint-solver,
+   and csv-io components — see dependencies/submodules/*/LICENSE)
+
+- delta-studio (clang/OpenGL port) — © phire
+  https://github.com/phire/delta-studio/tree/clang_linux
+
+- engine-sim (gcc/clang portability fixes) — © bobsayshilol
+  https://github.com/bobsayshilol/engine-sim/tree/gcc-fixes
+
+- engine-sim-APPLE_ARM (Apple-Silicon / native metal-cpp Metal backend) — © boxofbox
+  https://github.com/boxofbox/engine-sim-APPLE_ARM
+
+Bundled third-party libraries retain their own licenses:
+- metal-cpp (Apple) — dependencies/submodules/delta-studio/dependencies/libraries/metal-cpp
+- stb — dependencies/submodules/delta-studio/dependencies/libraries/stb
+
+redline's own modifications (2026, cleoanka) are released under the same MIT license
+(see LICENSE).
