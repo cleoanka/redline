@@ -8,9 +8,14 @@ All notable changes to redline. Format loosely follows Keep a Changelog.
 - Project docs: `docs/DESIGN.md`, `NOTICE`, this changelog; redline README.
 - CMake `DELTA_BUILD_DEMOS` option (default OFF) so delta-studio's large, unrelated
   demo projects and assets are excluded from the engine-sim build.
-- Env-var-gated Metal frame capture (`REDLINE_CAPTURE` / `REDLINE_CAPTURE_FRAME`):
-  the app reads back its own drawable and dumps a raw BGRA8 frame, so the render can
-  be verified headlessly without macOS Screen-Recording permission.
+- Env-var-gated Metal frame capture (`REDLINE_CAPTURE` / `REDLINE_CAPTURE_FRAME` /
+  `REDLINE_CAPTURE_SEQ=start,stride,count`): the app reads back its own drawable and dumps
+  raw BGRA8 frame(s), so the render can be recorded/verified headlessly without macOS
+  Screen-Recording permission.
+- Env-gated demo auto-run (`REDLINE_AUTORUN=1`): cranks and revs the engine unattended —
+  used to record the animated GIFs.
+- Visual media (`media/`): animated hero + engine-closeup GIFs, before/after bug
+  comparison, architecture diagram, app icon; a fully rewritten, illustrated README.
 - **Double-clickable `redline.app` bundle** via `scripts/make_app.sh` (binary +
   assets + `es/` script library + engine fonts/shaders + `Info.plist` + ad-hoc
   codesign). The app now `chdir`s to its own directory at startup and resolves assets

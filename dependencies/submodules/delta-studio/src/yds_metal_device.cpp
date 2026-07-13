@@ -275,18 +275,37 @@ ysError ysMetalDevice::Present() {
     YDS_ERROR_DECLARE("Present");
     pEnc->endEncoding();
 
-    // Env-var-gated offscreen frame capture. Set REDLINE_CAPTURE=<path> to dump one
-    // frame (default frame 90; override with REDLINE_CAPTURE_FRAME) as raw BGRA8:
-    //   int32 width, int32 height, then width*height*4 bytes.
-    // Lets us verify the render without macOS Screen-Recording permission — the app
-    // reads back its own drawable. No-op when the variable is unset.
+    // Env-var-gated offscreen frame capture — reads back the app's own drawable so the
+    // render can be verified/recorded without macOS Screen-Recording permission. Format is
+    // raw BGRA8: int32 width, int32 height, then width*height*4 bytes.
+    //   REDLINE_CAPTURE=<path>                 base output path
+    //   REDLINE_CAPTURE_FRAME=<n>              single frame n (default 90)
+    //   REDLINE_CAPTURE_SEQ=start,stride,count dump a sequence to <path>.000, <path>.001, ...
+    // No-op when REDLINE_CAPTURE is unset.
     static int s_redlineFrame = 0;
     ++s_redlineFrame;
     const char *redlineCapPath = std::getenv("REDLINE_CAPTURE");
-    const int redlineCapFrame =
-        std::getenv("REDLINE_CAPTURE_FRAME") ? std::atoi(std::getenv("REDLINE_CAPTURE_FRAME")) : 90;
+    char redlineCapName[1200];
+    redlineCapName[0] = '\0';
+    if (redlineCapPath != nullptr) {
+        const char *seq = std::getenv("REDLINE_CAPTURE_SEQ");
+        if (seq != nullptr) {
+            int start = 0, stride = 1, count = 1;
+            if (std::sscanf(seq, "%d,%d,%d", &start, &stride, &count) == 3 && stride > 0
+                    && s_redlineFrame >= start && (s_redlineFrame - start) % stride == 0) {
+                const int idx = (s_redlineFrame - start) / stride;
+                if (idx >= 0 && idx < count)
+                    std::snprintf(redlineCapName, sizeof(redlineCapName), "%s.%03d", redlineCapPath, idx);
+            }
+        } else {
+            const int frameN = std::getenv("REDLINE_CAPTURE_FRAME")
+                ? std::atoi(std::getenv("REDLINE_CAPTURE_FRAME")) : 90;
+            if (s_redlineFrame == frameN)
+                std::snprintf(redlineCapName, sizeof(redlineCapName), "%s", redlineCapPath);
+        }
+    }
     MTL::Texture *redlineCapTex = nullptr;
-    if (redlineCapPath != nullptr && s_redlineFrame == redlineCapFrame) {
+    if (redlineCapName[0] != '\0') {
         MTL::Texture *src = m_drawable->texture();
         MTL::TextureDescriptor *td = MTL::TextureDescriptor::alloc()->init();
         td->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
@@ -313,14 +332,14 @@ ysError ysMetalDevice::Present() {
         std::vector<uint8_t> pixels((size_t)cw * ch * 4);
         redlineCapTex->getBytes(pixels.data(), (NS::UInteger)(cw * 4),
                                 MTL::Region::Make2D(0, 0, cw, ch), 0);
-        FILE *f = std::fopen(redlineCapPath, "wb");
+        FILE *f = std::fopen(redlineCapName, "wb");
         if (f != nullptr) {
             int32_t hdr[2] = { cw, ch };
             std::fwrite(hdr, sizeof(int32_t), 2, f);
             std::fwrite(pixels.data(), 1, pixels.size(), f);
             std::fclose(f);
             printf("[redline] captured frame %d -> %s (%dx%d)\n",
-                   s_redlineFrame, redlineCapPath, cw, ch);
+                   s_redlineFrame, redlineCapName, cw, ch);
             fflush(stdout);
         }
         redlineCapTex->release();

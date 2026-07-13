@@ -18,6 +18,7 @@
 
 #include <chrono>
 #include <stdlib.h>
+#include <cmath>
 #include <sstream>
 
 #if ATG_ENGINE_SIM_DISCORD_ENABLED
@@ -217,6 +218,27 @@ void EngineSimApplication::process(float frame_dt) {
     }
 
     m_simulator.setSimulationSpeed(speed);
+
+    // Env-gated demo auto-run: crank and rev the engine unattended so headless captures
+    // show a live, moving engine. REDLINE_AUTORUN=1 enables it; no-op otherwise.
+    {
+        static int autoRunState = -1;   // -1 uninit, 0 off, 1 on
+        static long autoRunFrame = 0;
+        if (autoRunState == -1) autoRunState = (std::getenv("REDLINE_AUTORUN") != nullptr) ? 1 : 0;
+        if (autoRunState == 1 && m_simulator.getEngine() != nullptr) {
+            ++autoRunFrame;
+            const double t = autoRunFrame / 60.0;
+            m_simulator.getEngine()->getIgnitionModule()->m_enabled = true;
+            m_simulator.m_starterMotor.m_enabled = (autoRunFrame < 90);  // crank ~1.5 s
+            // Hold idle briefly after starting, then sweep the throttle for a lively rev.
+            double throttle = (autoRunFrame < 120) ? 0.0
+                            : 0.45 + 0.45 * std::sin((t - 2.0) * 1.1);
+            if (throttle < 0.0) throttle = 0.0;
+            m_targetSpeedSetting = throttle;
+            m_speedSetting = throttle;
+            m_iceEngine->setSpeedControl(throttle);
+        }
+    }
 
     const double avgFramerate = clamp(m_engine.GetAverageFramerate(), 30.0f, 1000.0f);
     m_simulator.startFrame(1 / avgFramerate);
