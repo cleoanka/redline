@@ -49,7 +49,12 @@ ysError ysErrorSystem::RaiseError(ysError error, unsigned int line, ysObject *ob
 void ysErrorSystem::StackRaise(const char *callName) {
     assert(m_stackLevel >= 0);
 
-    m_callStack[m_stackLevel] = callName;
+    // Defense in depth: never write past m_callStack. A caller that raises (via
+    // YDS_ERROR_DECLARE) without a matching descend (YDS_ERROR_RETURN) would otherwise
+    // walk m_stackLevel off the end of the array and corrupt the heap.
+    if (m_stackLevel >= 0 && m_stackLevel < MAX_STACK_LEVEL) {
+        m_callStack[m_stackLevel] = callName;
+    }
     m_stackLevel++;
 }
 

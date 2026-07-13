@@ -188,10 +188,12 @@ ysError ysMetalDevice::CreateSubRenderTarget(ysRenderTarget **newTarget, ysRende
 }
 
 ysError ysMetalDevice::ResizeRenderTarget(ysRenderTarget *target, int width, int height, int pwidth, int pheight) {
-    YDS_ERROR_DECLARE("ResizeRenderTarget");
     // No GPU resource to rebuild for on-screen/subdivision targets — just update the
     // stored dimensions (the base implementation), which drive the viewport in
-    // SetRenderTarget.
+    // SetRenderTarget. Delegate directly: do NOT add a YDS_ERROR_DECLARE here without a
+    // matching YDS_ERROR_RETURN — this is called every frame, and an unmatched DECLARE
+    // leaks one error-stack level per frame, overflowing ysErrorSystem::m_callStack in a
+    // few seconds and corrupting the heap.
     return ysDevice::ResizeRenderTarget(target, width, height, pwidth, pheight);
 }
 
