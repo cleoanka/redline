@@ -317,3 +317,19 @@ target_link_libraries(engine-sim-test
 
 include(GoogleTest)
 gtest_discover_tests(engine-sim-test)
+
+# ========================================================
+# macOS .app bundle
+#
+# `cmake --build build --target redline-app` builds engine-sim-app and then assembles
+# dist/redline.app (see scripts/make_app.sh).
+if (APPLE)
+    add_custom_target(redline-app
+        COMMAND ${CMAKE_COMMAND} -E env bash
+                "${CMAKE_SOURCE_DIR}/scripts/make_app.sh"
+                "${CMAKE_BINARY_DIR}" "${CMAKE_SOURCE_DIR}/dist"
+        DEPENDS engine-sim-app
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        COMMENT "Assembling dist/redline.app"
+        USES_TERMINAL)
+endif()
