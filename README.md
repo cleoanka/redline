@@ -92,17 +92,21 @@ open dist/redline.app                       # or double-click it in Finder
 
 ## Controls
 
-Minimal, keyboard-driven (unchanged from upstream):
+Minimal, keyboard-driven:
 
 | Key | Action | Key | Action |
 | :--: | :-- | :--: | :-- |
+| **[** / **]** | **Change engine** (cycle built-ins) | **Enter** | Reload engine script |
 | **A** | Toggle ignition | **S** | Hold for starter |
 | **D** | Enable dyno | **H** | RPM hold (needs dyno) |
 | **Q W E R** | Throttle presets | **Space** | Fine throttle (+scroll) |
 | **↑ / ↓** | Shift gear up/down | **Shift** | Clutch |
 | **Z/X/C/V/B** + scroll | Audio mix | **Tab** | Change screen |
-| **M / ,** | View layer up/down | **Enter** | Reload engine script |
-| **F** | Fullscreen | **Esc** | Quit |
+| **M / ,** | View layer up/down | **F** | Fullscreen |
+| **1–5** | Time-warp (slow-mo) | **Esc** | Quit |
+
+> **Change the engine live** with **[** and **]** — cycles through 16 built-in engines
+> (Chevy 454 V8, Hayabusa I4, 2JZ I6, LFA V10, Merlin V12, radials, …). No file editing.
 
 <details>
 <summary><b>Headless capture &amp; demo knobs</b> (how the GIFs above were made)</summary>

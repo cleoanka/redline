@@ -240,6 +240,21 @@ void EngineSimApplication::process(float frame_dt) {
         }
     }
 
+    // Env-gated engine auto-cycle: switch engines every REDLINE_CYCLE frames (used to
+    // stress-test the reload path headlessly / under ASan). No-op unless set.
+    {
+        static int cyclePeriod = -1;   // -1 uninit, 0 off
+        static long cycleFrame = 0;
+        if (cyclePeriod == -1) {
+            const char *e = std::getenv("REDLINE_CYCLE");
+            cyclePeriod = (e != nullptr) ? std::atoi(e) : 0;
+            if (cyclePeriod < 0) cyclePeriod = 0;
+        }
+        if (cyclePeriod > 0 && (++cycleFrame % cyclePeriod) == 0) {
+            switchEngine(1);
+        }
+    }
+
     const double avgFramerate = clamp(m_engine.GetAverageFramerate(), 30.0f, 1000.0f);
     m_simulator.startFrame(1 / avgFramerate);
 
@@ -374,6 +389,10 @@ void EngineSimApplication::run() {
             m_screen++;
             if (m_screen > 2) m_screen = 0;
         }
+
+        // [ / ] cycle through the built-in engines at runtime.
+        if (m_engine.ProcessKeyDown(ysKey::Code::OEM_6)) switchEngine(1);
+        if (m_engine.ProcessKeyDown(ysKey::Code::OEM_4)) switchEngine(-1);
 
         if (m_engine.ProcessKeyDown(ysKey::Code::F)) {
             if (m_engine.GetGameWindow()->GetWindowStyle() != ysWindow::WindowStyle::Fullscreen) {
@@ -624,6 +643,67 @@ const SimulationObject::ViewParameters &
     EngineSimApplication::getViewParameters() const
 {
     return m_viewParameters;
+}
+
+namespace {
+    struct EnginePreset {
+        const char *import;   // path under assets/engines/
+        const char *fn;       // engine node to call
+        const char *name;     // friendly label
+    };
+    // Built-in engines cycled with the [ and ] keys. All are stock engine-sim demo
+    // engines; a preset that fails to compile just shows "<NO ENGINE>" (no crash) and
+    // the next press moves on.
+    const EnginePreset kEnginePresets[] = {
+        {"engines/chevrolet/chev_truck_454.mr",              "chev_truck_454",             "Chevrolet 454 V8"},
+        {"engines/atg-video-1/04_hayabusa.mr",               "hayabusa_i4",                "Suzuki Hayabusa I4"},
+        {"engines/atg-video-1/05_honda_vtec.mr",             "honda_vtec_i4",              "Honda VTEC I4"},
+        {"engines/atg-video-1/06_subaru_ej25.mr",            "subaru_ej25",                "Subaru EJ25 flat-4"},
+        {"engines/atg-video-1/07_audi_i5.mr",                "audi_i5_2_2L",               "Audi 2.2 I5"},
+        {"engines/atg-video-2/03_2jz.mr",                    "t2jz",                       "Toyota 2JZ I6"},
+        {"engines/bmw/M52B28.mr",                            "M52B28",                     "BMW M52B28 I6"},
+        {"engines/atg-video-2/04_60_degree_v6.mr",           "v6_60",                      "60-degree V6"},
+        {"engines/atg-video-2/07_gm_ls.mr",                  "ls_v8",                      "GM LS V8"},
+        {"engines/atg-video-2/08_ferrari_f136_v8.mr",        "f136_v8",                    "Ferrari F136 V8"},
+        {"engines/atg-video-2/10_lfa_v10.mr",                "lr_gue_v10",                 "Lexus LFA V10"},
+        {"engines/atg-video-2/11_merlin_v12.mr",             "merlin_v12",                 "Rolls-Royce Merlin V12"},
+        {"engines/atg-video-2/12_ferrari_412_t2.mr",         "ferrari_412_t2_v12",         "Ferrari 412 T2 V12"},
+        {"engines/atg-video-2/09_radial_9.mr",               "radial_9",                   "9-cylinder radial"},
+        {"engines/atg-video-1/03_harley_davidson_shovelhead.mr", "harley_davidson_shovelhead", "Harley Shovelhead V-twin"},
+        {"engines/atg-video-1/01_honda_trx520.mr",           "honda_trx520",               "Honda TRX520 V-twin"},
+    };
+    const int kEnginePresetCount = (int)(sizeof(kEnginePresets) / sizeof(kEnginePresets[0]));
+}
+
+void EngineSimApplication::switchEngine(int direction) {
+    const int n = kEnginePresetCount;
+    m_enginePresetIndex = ((m_enginePresetIndex + direction) % n + n) % n;
+    const EnginePreset &preset = kEnginePresets[m_enginePresetIndex];
+
+    // Rewrite main.mr (in the asset path, so its relative imports resolve) with the chosen
+    // engine, then reload. Bracketing the reload with audio Stop/Loop keeps the audio
+    // thread from touching the engine while it is torn down and rebuilt.
+    std::ofstream out(m_assetPath + "/main.mr", std::ios::out | std::ios::trunc);
+    if (out.is_open()) {
+        out << "import \"engine_sim.mr\"\n"
+            << "import \"themes/default.mr\"\n"
+            << "import \"" << preset.import << "\"\n\n"
+            << "use_default_theme()\n"
+            << "set_engine(\n    " << preset.fn << "()\n)\n";
+        out.close();
+    }
+
+    if (m_audioSource != nullptr) m_audioSource->SetMode(ysAudioSource::Mode::Stop);
+    loadScript();
+    if (m_simulator.getEngine() != nullptr && m_audioSource != nullptr) {
+        m_audioSource->SetMode(ysAudioSource::Mode::Loop);
+    }
+
+    if (m_infoCluster != nullptr) {
+        m_infoCluster->setLogMessage(
+            "[" + std::to_string(m_enginePresetIndex + 1) + "/" + std::to_string(n) + "] "
+            + preset.name + "  ([ / ] to change engine)");
+    }
 }
 
 void EngineSimApplication::loadScript() {

@@ -16,6 +16,11 @@ All notable changes to redline. Format loosely follows Keep a Changelog.
   idle+focus-change stress test.
 
 ### Added
+- **In-app engine switcher** — `[` and `]` cycle through 16 built-in engines at runtime
+  (Chevy 454 V8, Hayabusa I4, VTEC, EJ25, 2JZ, LS/Ferrari V8s, LFA V10, Merlin V12,
+  radials, V-twins, …). Rewrites `main.mr` with the chosen preset and hot-reloads it,
+  bracketed by audio stop/start so the audio thread never touches an engine being rebuilt.
+  Env-gated `REDLINE_CYCLE=<frames>` auto-cycles (for testing the reload path).
 - Project docs: `docs/DESIGN.md`, `NOTICE`, this changelog; redline README.
 - CMake `DELTA_BUILD_DEMOS` option (default OFF) so delta-studio's large, unrelated
   demo projects and assets are excluded from the engine-sim build.

@@ -93,6 +93,11 @@ class EngineSimApplication {
         void processEngineInput();
         void renderScene();
 
+        // Cycle to another built-in engine at runtime ([ / ] keys). direction: +1 next,
+        // -1 previous. Rewrites main.mr with the chosen preset and reloads.
+        void switchEngine(int direction);
+        int m_enginePresetIndex = 0;
+
         void refreshUserInterface();
 
     protected:
