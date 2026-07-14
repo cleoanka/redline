@@ -149,19 +149,15 @@ ysError dbasic::DeltaEngine::CreateGameWindow(const GameEngineSettings &settings
     YDS_NESTED_ERROR_CALL(m_device->CreateOnScreenRenderTarget(&m_mainRenderTarget, m_renderingContext, settings.DepthBuffer));
 
     m_mainRenderTarget->SetDebugName("MAIN_RENDER_TARGET");
-    printf("\ninit geometry\n");
     // Initialize Geometry
     YDS_NESTED_ERROR_CALL(InitializeGeometry());
-    printf("init renderer\n");
     // Initialize UI renderer
     m_uiRenderer.SetEngine(this);
     YDS_NESTED_ERROR_CALL(m_uiRenderer.Initialize(32768));
-    printf("init console\n");
     // Initialize the console
     m_console.SetEngine(this);
     m_console.SetRenderer(&m_uiRenderer);
     YDS_NESTED_ERROR_CALL(m_console.Initialize());
-    printf("init shaders\n");
     // Initialize Shaders
     YDS_NESTED_ERROR_CALL(InitializeShaders(settings.ShaderDirectory));
 
@@ -383,7 +379,6 @@ ysError dbasic::DeltaEngine::InitializeShaders(const char *shaderDirectory) {
     else if (m_device->GetAPI() == ysContextObject::DeviceAPI::Metal)
     {
         /* Metal Shaders have vert and frag in one file*/
-        printf("Metal shaders\n");
         sprintf_s(buffer, 256, "%s%s", shaderDirectory, "msl/engine_shader.metal");
         YDS_NESTED_ERROR_CALL(m_device->CreateVertexShader(&m_vertexShader, buffer, "main vertex"));
         YDS_NESTED_ERROR_CALL(m_device->CreateVertexShader(&m_vertexSkinnedShader, buffer, "skinned vertex"));
@@ -496,9 +491,12 @@ ysError dbasic::DeltaEngine::LoadFont(Font **font, const char *path, int size, i
     FILE *f = fopen(path, "rb");
 
     if (f == nullptr) {
+        delete[] ttfBuffer;
+        delete[] bitmapData;
         return YDS_ERROR_RETURN(ysError::CouldNotOpenFile);
     }
     fread(ttfBuffer, 1, 1 << 20, f);
+    fclose(f);
 
     stbtt_packedchar *cdata = new stbtt_packedchar[96];
 
@@ -516,6 +514,7 @@ ysError dbasic::DeltaEngine::LoadFont(Font **font, const char *path, int size, i
     newFont->Initialize(32, 96, cdata, (float)fontSize, texture);
 
     delete[] cdata;
+    delete[] bitmapData;   // CreateAlphaTexture copies it; the caller's buffer was leaked
 
     return YDS_ERROR_RETURN(ysError::None);
 }

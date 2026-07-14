@@ -12,7 +12,7 @@ public:
     ysMetalTexture();
     ~ysMetalTexture();
 
-    MTL::Texture* m_texture;
+    MTL::Texture* m_texture = nullptr;
 };
 
 #endif /* YDS_METAL_TEXTURE_H */

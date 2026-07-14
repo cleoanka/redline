@@ -97,6 +97,10 @@ class Synthesizer {
         LevelingFilter m_levelingFilter;
         InputChannel *m_inputChannels;
         AudioParameters m_audioParameters;
+        // Audio-thread-private snapshot of m_audioParameters, taken under m_lock0 at the top
+        // of renderAudio() so the unlocked render loop never torn-reads the shared struct
+        // while setAudioParameters() writes it.
+        AudioParameters m_renderParameters;
         int m_inputChannelCount;
         int m_inputBufferSize;
         int m_inputSamplesRead;

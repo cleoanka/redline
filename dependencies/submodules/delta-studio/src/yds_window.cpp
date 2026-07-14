@@ -163,7 +163,6 @@ void ysWindow::AttachEventHandler(ysWindowEventHandler *handler) {
     if (handler) handler->m_window = this;
 
     m_eventHandler = handler;
-    printf("attached event handler\n");
 }
 
 void ysWindow::SetGameResolutionScale(float scale) {

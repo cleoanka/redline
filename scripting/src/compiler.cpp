@@ -62,6 +62,16 @@ bool es_script::Compiler::compile(const piranha::IrPath &path) {
 }
 
 es_script::Compiler::Output es_script::Compiler::execute() {
+    // output() is a static singleton reused across every compile. Reset it before running
+    // so that switching to an engine script that does NOT set a vehicle/transmission does
+    // not leave stale (already-deleted) pointers from the previous engine — which would
+    // make loadEngine delete-then-reassign freed memory (use-after-free / double-free).
+    Output *o = output();
+    o->engine = nullptr;
+    o->vehicle = nullptr;
+    o->transmission = nullptr;
+    o->functions.clear();
+
     const bool result = m_program.execute();
 
     if (!result) {

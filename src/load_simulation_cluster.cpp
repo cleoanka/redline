@@ -109,7 +109,9 @@ void LoadSimulationCluster::initialize(EngineSimApplication *app) {
 }
 
 void LoadSimulationCluster::destroy() {
-    /* void */
+    // Recursively delete the child UI elements (4 LabeledGauges + nested Gauges); the empty
+    // body leaked them on every UI rebuild (refreshUserInterface runs on each reload).
+    UiElement::destroy();
 }
 
 void LoadSimulationCluster::update(float dt) {

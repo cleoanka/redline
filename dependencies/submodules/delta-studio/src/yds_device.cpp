@@ -415,8 +415,10 @@ ysError ysDevice::DestroyTexture(ysTexture *&texture) {
 ysError ysDevice::InitializeTextureSlots(int maxSlots) {
     YDS_ERROR_DECLARE("InitializeTextureSlots");
 
-    m_activeTextures = new ysTextureSlot [maxSlots];
-    memset(m_activeTextures, 0, sizeof(ysTextureSlot *) * maxSlots);
+    // Value-initialise every slot. The previous memset used sizeof(pointer) rather than
+    // sizeof(struct), so only the lower half of each 16-byte slot was zeroed and the rest
+    // held garbage RenderTarget/Texture pointers.
+    m_activeTextures = new ysTextureSlot[maxSlots]();
 
     m_maxTextureSlots = maxSlots;
 

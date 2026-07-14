@@ -46,7 +46,6 @@ Simulator::~Simulator() {
     assert(m_system == nullptr);
     assert(m_exhaustFlowStagingBuffer == nullptr);
     assert(m_delayFilters == nullptr);
-    assert(m_antialiasingFilters == nullptr);
     assert(m_dynoTorqueSamples == nullptr);
 }
 
@@ -513,6 +512,8 @@ void Simulator::destroy() {
     if (m_exhaustFlowStagingBuffer != nullptr) delete[] m_exhaustFlowStagingBuffer;
     if (m_system != nullptr) delete m_system;
     if (m_delayFilters != nullptr) delete[] m_delayFilters;
+    if (m_crankshaftLinks != nullptr) delete[] m_crankshaftLinks;     // was leaked every reload
+    if (m_dynoTorqueSamples != nullptr) delete[] m_dynoTorqueSamples; // was leaked every reload
 
     m_crankConstraints = nullptr;
     m_cylinderWallConstraints = nullptr;
@@ -520,6 +521,9 @@ void Simulator::destroy() {
     m_crankshaftFrictionConstraints = nullptr;
     m_exhaustFlowStagingBuffer = nullptr;
     m_system = nullptr;
+    m_crankshaftLinks = nullptr;
+    m_dynoTorqueSamples = nullptr;
+    m_lastDynoTorqueSample = 0;
 
     m_vehicle = nullptr;
     m_transmission = nullptr;
@@ -555,8 +559,6 @@ void Simulator::writeToSynthesizer() {
     const double attenuation = std::min(std::abs(m_filteredEngineSpeed), 40.0) / 40.0;
     const double attenuation_3 = attenuation * attenuation * attenuation;
 
-    static double lastValveLift[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-
     const double timestep = getTimestep();
     const int cylinderCount = m_engine->getCylinderCount();
     for (int i = 0; i < cylinderCount; ++i) {
@@ -575,8 +577,6 @@ void Simulator::writeToSynthesizer() {
                 1.0 * (chamber->m_exhaustRunnerAndPrimary.pressure() - units::pressure(1.0, units::atm))
                 + 0.1 * chamber->m_exhaustRunnerAndPrimary.dynamicPressure(1.0, 0.0)
                 + 0.1 * chamber->m_exhaustRunnerAndPrimary.dynamicPressure(-1.0, 0.0));
-
-        lastValveLift[i] = head->exhaustValveLift(piston->getCylinderIndex());
 
         const double delayedExhaustPulse =
             m_delayFilters[i].fast_f(exhaustFlow);

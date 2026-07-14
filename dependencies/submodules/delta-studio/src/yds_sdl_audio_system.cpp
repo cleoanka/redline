@@ -73,5 +73,16 @@ void ysSdlAudioSystem::ConnectDeviceConsole(ysAudioDevice *device) {
 }
 
 void ysSdlAudioSystem::DisconnectDevice(ysAudioDevice *device) {
+    // Stop the SDL audio callback before anything frees the device's source list. The
+    // callback thread runs ysSdlAudioDevice::FillBuffer(), which iterates m_audioSources;
+    // closing the device here — while it is still fully alive — blocks until any in-flight
+    // callback finishes and no new ones start, preventing a use-after-free during teardown.
+    if (device != nullptr) {
+        auto *sdlDevice = static_cast<ysSdlAudioDevice *>(device);
+        if (sdlDevice->m_deviceId != 0) {
+            SDL_CloseAudioDevice(sdlDevice->m_deviceId);
+            sdlDevice->m_deviceId = 0;
+        }
+    }
     ysAudioSystem::DisconnectDevice(device);
 }

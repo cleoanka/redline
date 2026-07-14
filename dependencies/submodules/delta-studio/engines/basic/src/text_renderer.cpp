@@ -48,6 +48,7 @@ void dbasic::TextRenderer::RenderText(const std::string &s, float x, float y, fl
         }
 
         const Font::GlyphData *data = m_font->GetGlyphData(character);
+        if (data == nullptr) continue;   // glyph outside the packed range (e.g. high-bit char)
 
         vertexData[quadIndex * 4 + 0].TexCoord = ysVector2(data->uv0.x, data->uv0.y);
         vertexData[quadIndex * 4 + 1].TexCoord = ysVector2(data->uv1.x, data->uv0.y);
@@ -97,6 +98,7 @@ void dbasic::TextRenderer::RenderMonospaceText(const std::string &s, float x, fl
         }
 
         const Font::GlyphData *data = m_font->GetGlyphData(character);
+        if (data == nullptr) continue;   // glyph outside the packed range (e.g. high-bit char)
 
         vertexData[quadIndex * 4 + 0].TexCoord = ysVector2(data->uv0.x, data->uv0.y);
         vertexData[quadIndex * 4 + 1].TexCoord = ysVector2(data->uv1.x, data->uv0.y);
@@ -130,6 +132,7 @@ float dbasic::TextRenderer::CalculateWidth(const std::string &s, float h) const 
         const char character = s[i];
 
         const Font::GlyphData *data = m_font->GetGlyphData(character);
+        if (data == nullptr) continue;   // glyph outside the packed range (e.g. high-bit char)
         width += data->Shift * scale;
     }
 

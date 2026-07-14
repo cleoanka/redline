@@ -35,6 +35,9 @@ void ConvolutionFilter::destroy() {
 }
 
 float ConvolutionFilter::f(float sample) {
+    // A near-silent impulse response yields a zero-length filter; without this guard the
+    // next line writes out of bounds and the trailing `% m_sampleCount` divides by zero.
+    if (m_sampleCount <= 0 || m_shiftRegister == nullptr) return 0.0f;
     m_shiftRegister[m_shiftOffset] = sample;
 
     float result = 0;

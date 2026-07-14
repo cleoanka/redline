@@ -11,7 +11,7 @@ class ysMetalShaderProgram : public ysShaderProgram {
 public:
     ysMetalShaderProgram();
     ~ysMetalShaderProgram();
-    ysMetalShader* m_shader;
+    ysMetalShader* m_shader = nullptr;
 
 protected:
     ysMetalShader *GetShader(ysShader::ShaderType type);

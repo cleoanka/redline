@@ -301,6 +301,7 @@ const char ysKeyboard::CharMapUpper[] = {
     '\0',    // KEY_F6
     '\0',    // KEY_F7
     '\0',    // KEY_F8
+    '\0',    // KEY_F9   (was missing — misaligned CharMapUpper vs CharMap by one)
     '\0',    // KEY_F10
     '\0',    // KEY_F11
     '\0',    // KEY_F12
@@ -412,7 +413,9 @@ void ysKeyboard::SetKeyState(ysKey::Code key, ysKey::State state, ysKey::Variati
             keyMap = CharMap;
         }
 
-        if (keyMap[(int)key] != '\0') {
+        // CharMap/CharMapUpper only cover codes below Undefined; most physical keys map to
+        // Undefined, so guard against reading one (or more) past the end of the table.
+        if ((int)key >= 0 && (int)key < (int)ysKey::Code::Undefined && keyMap[(int)key] != '\0') {
             if (m_inputBufferOffset == 255) {
                 --m_inputBufferOffset;
 

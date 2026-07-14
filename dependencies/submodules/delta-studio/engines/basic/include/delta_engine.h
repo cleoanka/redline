@@ -175,20 +175,23 @@ namespace dbasic {
         // Shader Controls
         ShaderSet *m_shaderSet;
 
-        ysGPUBuffer *m_consoleShaderObjectVariablesBuffer;
+        ysGPUBuffer *m_consoleShaderObjectVariablesBuffer = nullptr;   // ctor never nulled it
         ConsoleShaderObjectVariables m_consoleShaderObjectVariables;
 
-        ysShader *m_vertexShader;
-        ysShader *m_vertexSkinnedShader;
-        ysShader *m_pixelShader;
-        ysShader *m_consoleVertexShader;
-        ysShader *m_consolePixelShader;
-        ysShader *m_saqVertexShader;
-        ysShader *m_saqPixelShader;
+        // Null-initialized in-class: the Metal/basic path never creates the skinned and
+        // screen-aligned-quad shaders, and Destroy() unconditionally destroys every one of
+        // these. An uninitialized member here is a garbage pointer that crashes teardown.
+        ysShader *m_vertexShader = nullptr;
+        ysShader *m_vertexSkinnedShader = nullptr;
+        ysShader *m_pixelShader = nullptr;
+        ysShader *m_consoleVertexShader = nullptr;
+        ysShader *m_consolePixelShader = nullptr;
+        ysShader *m_saqVertexShader = nullptr;
+        ysShader *m_saqPixelShader = nullptr;
 
-        ysShaderProgram *m_shaderProgram;
-        ysShaderProgram *m_skinnedShaderProgram;
-        ysShaderProgram *m_consoleProgram;
+        ysShaderProgram *m_shaderProgram = nullptr;
+        ysShaderProgram *m_skinnedShaderProgram = nullptr;
+        ysShaderProgram *m_consoleProgram = nullptr;
 
         ysRenderGeometryFormat m_skinnedFormat;
         ysRenderGeometryFormat m_standardFormat;

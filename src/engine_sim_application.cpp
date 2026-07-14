@@ -378,10 +378,17 @@ float EngineSimApplication::unitsToPixels(float units) const {
 }
 
 void EngineSimApplication::run() {
+    // Env-gated frame cap: quit cleanly after REDLINE_MAXFRAMES frames so headless / CI /
+    // ASan runs terminate on their own (and exercise the full teardown path). No-op unless set.
+    long maxFrames = 0;
+    if (const char *e = std::getenv("REDLINE_MAXFRAMES")) maxFrames = std::atoi(e);
+    long frameCount = 0;
+
     while (true) {
         m_engine.StartFrame();
 
         if (!m_engine.IsOpen()) break;
+        if (maxFrames > 0 && ++frameCount > maxFrames) break;
 
         // Refresh the game controller once per frame (also handles hot-plug).
         m_gamepad.update();
@@ -700,22 +707,31 @@ namespace {
 
 void EngineSimApplication::switchEngine(int direction) {
     const int n = kEnginePresetCount;
-    m_enginePresetIndex = ((m_enginePresetIndex + direction) % n + n) % n;
-    const EnginePreset &preset = kEnginePresets[m_enginePresetIndex];
+    const int newIndex = ((m_enginePresetIndex + direction) % n + n) % n;
+    const EnginePreset &preset = kEnginePresets[newIndex];
 
     // Rewrite main.mr (in the asset path, so its relative imports resolve) with the chosen
-    // engine, then reload. Bracketing the reload with audio Stop/Loop keeps the audio
-    // thread from touching the engine while it is torn down and rebuilt.
+    // engine, then reload. If the write fails (e.g. the app is on a read-only mount) do NOT
+    // advance the index or claim success — loadScript would reload the OLD engine and the
+    // label would desync.
     std::ofstream out(m_assetPath + "/main.mr", std::ios::out | std::ios::trunc);
-    if (out.is_open()) {
-        out << "import \"engine_sim.mr\"\n"
-            << "import \"themes/default.mr\"\n"
-            << "import \"" << preset.import << "\"\n\n"
-            << "use_default_theme()\n"
-            << "set_engine(\n    " << preset.fn << "()\n)\n";
-        out.close();
+    if (!out.is_open()) {
+        if (m_infoCluster != nullptr) {
+            m_infoCluster->setLogMessage("Could not write main.mr (read-only?) — engine unchanged");
+        }
+        return;
     }
+    out << "import \"engine_sim.mr\"\n"
+        << "import \"themes/default.mr\"\n"
+        << "import \"" << preset.import << "\"\n\n"
+        << "use_default_theme()\n"
+        << "set_engine(\n    " << preset.fn << "()\n)\n";
+    out.close();
 
+    m_enginePresetIndex = newIndex;
+
+    // Bracketing the reload with audio Stop/Loop keeps the audio thread from touching the
+    // engine while it is torn down and rebuilt.
     if (m_audioSource != nullptr) m_audioSource->SetMode(ysAudioSource::Mode::Stop);
     loadScript();
     if (m_simulator.getEngine() != nullptr && m_audioSource != nullptr) {

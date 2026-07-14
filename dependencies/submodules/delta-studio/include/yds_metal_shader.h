@@ -13,8 +13,8 @@ public:
 
 protected:
 
-    MTL::Library* m_shader;
-    MTL::RenderPipelineState* m_pipelineState;
+    MTL::Library* m_shader = nullptr;
+    MTL::RenderPipelineState* m_pipelineState = nullptr;
     
 };
 

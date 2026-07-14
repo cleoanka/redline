@@ -8,7 +8,13 @@ ysSdlAudioDevice::ysSdlAudioDevice() : ysAudioDevice(API::Sdl) {
 }
 
 ysSdlAudioDevice::~ysSdlAudioDevice() {
-    /* void */
+    // RAII safety net: if the device is destroyed without a prior DisconnectDevice, still
+    // close the SDL device (stopping the callback thread) before the base class frees
+    // m_audioSources. No-op in the normal teardown path, which already closed it.
+    if (m_deviceId != 0) {
+        SDL_CloseAudioDevice(m_deviceId);
+        m_deviceId = 0;
+    }
 }
 
 ysAudioBuffer *ysSdlAudioDevice::CreateBuffer(const ysAudioParameters *parameters, SampleOffset size) {

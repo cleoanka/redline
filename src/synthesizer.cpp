@@ -96,7 +96,7 @@ void Synthesizer::initializeImpulseResponse(
         }
     }
 
-    const unsigned int sampleCount = std::min(10000U, clippedLength);
+    const unsigned int sampleCount = std::max(1U, std::min(10000U, clippedLength));
     m_filters[index].Convolution.initialize(sampleCount);
     for (unsigned int i = 0; i < sampleCount; ++i) {
         m_filters[index].Convolution.getImpulseResponse()[i] =
@@ -126,6 +126,8 @@ void Synthesizer::destroy() {
 
     for (int i = 0; i < m_inputChannelCount; ++i) {
         m_inputChannels[i].Data.destroy();
+        delete[] m_inputChannels[i].TransferBuffer;   // was leaked every engine switch
+        m_inputChannels[i].TransferBuffer = nullptr;
         m_filters[i].Convolution.destroy();
     }
 
@@ -139,6 +141,10 @@ void Synthesizer::destroy() {
 }
 
 int Synthesizer::readAudioOutput(int samples, int16_t *buffer) {
+    // Guard against a non-positive request: a negative count would turn the ring buffer's
+    // readAndRemove into a memmove with a huge unsigned length (crash); zero is a no-op.
+    if (samples <= 0) return 0;
+
     std::lock_guard<std::mutex> lock(m_lock0);
 
     const int newDataLength = m_audioBuffer.size();
@@ -240,12 +246,17 @@ void Synthesizer::renderAudio() {
     m_inputSamplesRead = n;
     m_processed = true;
 
+    // Snapshot the shared parameters while still holding the lock; the render loop below
+    // runs unlocked and must not read m_audioParameters directly (setAudioParameters may
+    // be writing it concurrently).
+    m_renderParameters = m_audioParameters;
+
     lk0.unlock();
 
     for (int i = 0; i < m_inputChannelCount; ++i) {
         m_filters[i].AirNoiseLowPass.setCutoffFrequency(
-            static_cast<float>(m_audioParameters.AirNoiseFrequencyCutoff), m_audioSampleRate);
-        m_filters[i].JitterFilter.setJitterScale(m_audioParameters.InputSampleNoise);
+            static_cast<float>(m_renderParameters.AirNoiseFrequencyCutoff), m_audioSampleRate);
+        m_filters[i].JitterFilter.setJitterScale(m_renderParameters.InputSampleNoise);
     }
 
     for (int i = 0; i < n; ++i) {
@@ -279,9 +290,9 @@ void Synthesizer::setInputSampleRate(double sampleRate) {
 }
 
 int16_t Synthesizer::renderAudio(int inputSample) {
-    const float airNoise = m_audioParameters.AirNoise;
-    const float dF_F_mix = m_audioParameters.dF_F_mix;
-    const float convAmount = m_audioParameters.Convolution;
+    const float airNoise = m_renderParameters.AirNoise;
+    const float dF_F_mix = m_renderParameters.dF_F_mix;
+    const float convAmount = m_renderParameters.Convolution;
 
     float signal = 0;
     for (int i = 0; i < m_inputChannelCount; ++i) {
@@ -317,8 +328,8 @@ int16_t Synthesizer::renderAudio(int inputSample) {
 
     signal = m_antialiasing.fast_f(signal);
 
-    m_levelingFilter.p_target = m_audioParameters.LevelerTarget;
-    const float v_leveled = m_levelingFilter.f(signal) * m_audioParameters.Volume;
+    m_levelingFilter.p_target = m_renderParameters.LevelerTarget;
+    const float v_leveled = m_levelingFilter.f(signal) * m_renderParameters.Volume;
     int r_int = std::lround(v_leveled);
     if (r_int > INT16_MAX) {
         r_int = INT16_MAX;

@@ -86,6 +86,7 @@ ysError dbasic::Console::UpdateGeometry() {
             if (IsWhiteSpace(character)) continue;
 
             const Font::GlyphData *data = m_font->GetGlyphData(character);
+            if (data == nullptr) continue;   // box/high-bit chars are outside the packed font
             const float offsetX = (-m_engine->GetScreenWidth() / 2.0f) + (scale_x * i);
             const float offsetY = (m_engine->GetScreenHeight() / 2.0f) - (scale_y * j) - scale_y - 50;
             //printf("font: %f, %f, %f, %f\n", data->uv0.x, data->uv0.y, data->uv1.x, data->uv1.y);

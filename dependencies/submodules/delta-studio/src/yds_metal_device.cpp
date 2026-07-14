@@ -42,7 +42,6 @@ ysMetalDevice::~ysMetalDevice() {
 
 ysError ysMetalDevice::InitializeDevice() {
     YDS_ERROR_DECLARE("InitializeDevice");
-    printf("init metal device\n");
 
     return YDS_ERROR_RETURN(ysError::None);
 }
@@ -74,7 +73,6 @@ ysError ysMetalDevice::CreateRenderingContext(ysRenderingContext **renderingCont
     auto device = swapchain->device();
     m_drawable = swapchain->nextDrawable();
     auto name = device->name();
-    printf("create metal swapchain, name: %s, type: %s\n", name->utf8String(), typeid(device).name());
     m_device = device;
     m_queue = MTL::make_owned(device->newCommandQueue());
     pCmd = MTL::make_owned(m_queue->commandBuffer());
@@ -207,7 +205,11 @@ ysError ysMetalDevice::ResizeRenderTarget(ysRenderTarget *target, int width, int
 }
 
 ysError ysMetalDevice::DestroyRenderTarget(ysRenderTarget *&target) {
-    return ysError();
+    YDS_ERROR_DECLARE("DestroyRenderTarget");
+    if (target == nullptr) return YDS_ERROR_RETURN(ysError::None);
+    // On-screen/subdivision targets borrow the drawable's texture (nothing to release here);
+    // base removes the wrapper from m_renderTargets and nulls the pointer.
+    return ysDevice::DestroyRenderTarget(target);
 }
 
 ysError ysMetalDevice::SetRenderTarget(ysRenderTarget *target, int slot) {
@@ -596,9 +598,22 @@ ysError ysMetalDevice::EditBufferData(ysGPUBuffer *buffer, char *data) {
 }
 
 ysError ysMetalDevice::DestroyGPUBuffer(ysGPUBuffer *&buffer) {
-    YDS_ERROR_DECLARE("destroybuffer");
-    printf("destroy buffer\n");
-    return YDS_ERROR_RETURN(ysError::None);
+    YDS_ERROR_DECLARE("DestroyGPUBuffer");
+    if (buffer == nullptr) return YDS_ERROR_RETURN(ysError::None);
+
+    ysMetalGPUBuffer *metalBuffer = static_cast<ysMetalGPUBuffer *>(buffer);
+    for (int i = 0; i < kMaxFramesInFlight; ++i) {
+        if (metalBuffer->m_buffer[i] != nullptr) {
+            metalBuffer->m_buffer[i]->release();   // +1 from newBuffer()
+            metalBuffer->m_buffer[i] = nullptr;
+        }
+    }
+    if (metalBuffer->constantBuffer != nullptr) {
+        delete[] metalBuffer->constantBuffer;
+        metalBuffer->constantBuffer = nullptr;
+    }
+    // Base frees the RAM mirror and removes the wrapper from m_gpuBuffers (nulls buffer).
+    return ysDevice::DestroyGPUBuffer(buffer);
 }
 
 ysError ysMetalDevice::CreateVertexShader(ysShader **newShader, const char *shaderFilename, const char *shaderName) {
@@ -641,7 +656,6 @@ ysError ysMetalDevice::CreateVertexShader(ysShader **newShader, const char *shad
 
     *newShader = static_cast<ysShader *>(newMetalShader);
 
-    printf("metal shader ok\n");
     return YDS_ERROR_RETURN(ysError::None);
 }
 
@@ -651,7 +665,18 @@ ysError ysMetalDevice::CreatePixelShader(ysShader **newShader, const char *shade
 }
 
 ysError ysMetalDevice::DestroyShader(ysShader *&shader) {
-    return ysError();
+    YDS_ERROR_DECLARE("DestroyShader");
+    if (shader == nullptr) return YDS_ERROR_RETURN(ysError::None);
+    ysMetalShader *metalShader = static_cast<ysMetalShader *>(shader);
+    if (metalShader->m_pipelineState != nullptr) {
+        metalShader->m_pipelineState->release();   // +1 from newRenderPipelineState()
+        metalShader->m_pipelineState = nullptr;
+    }
+    if (metalShader->m_shader != nullptr) {
+        metalShader->m_shader->release();   // +1 from newLibrary()
+        metalShader->m_shader = nullptr;
+    }
+    return ysDevice::DestroyShader(shader);
 }
 
 ysError ysMetalDevice::CreateShaderProgram(ysShaderProgram **newProgram) {
@@ -665,7 +690,10 @@ ysError ysMetalDevice::CreateShaderProgram(ysShaderProgram **newProgram) {
 }
 
 ysError ysMetalDevice::DestroyShaderProgram(ysShaderProgram *&shader, bool destroyShaders) {
-    return ysError();
+    YDS_ERROR_DECLARE("DestroyShaderProgram");
+    if (shader == nullptr) return YDS_ERROR_RETURN(ysError::None);
+    // Base optionally destroys the attached shaders and removes the wrapper from the array.
+    return ysDevice::DestroyShaderProgram(shader, destroyShaders);
 }
 
 ysError ysMetalDevice::AttachShader(ysShaderProgram *program, ysShader *shader) {
@@ -702,7 +730,6 @@ ysError ysMetalDevice::UseShaderProgram(ysShaderProgram * program) {
 ysError ysMetalDevice::CreateInputLayout(ysInputLayout **newInputLayout, ysShader *shader, const ysRenderGeometryFormat *format) {
     YDS_ERROR_DECLARE("CreateInputLayout");
     NS::Error* pError;
-    printf("metal create input layout\n");
     ysMetalShader *metalShader = static_cast<ysMetalShader *>(shader);
     auto vertexFunction = metalShader->m_shader->newFunction(NS::String::string("vertex_main", NS::UTF8StringEncoding));
     auto fragFunction = metalShader->m_shader->newFunction(NS::String::string("fragment_main", NS::UTF8StringEncoding));
@@ -734,12 +761,19 @@ ysError ysMetalDevice::CreateInputLayout(ysInputLayout **newInputLayout, ysShade
         m_attributeDesc->setOffset(channel->GetOffset());
         m_vertexAttribDescArray->setObject(m_attributeDesc, i);
         m_layoutDesc->setStride(m_layoutDesc->stride() + GetStrideOfFormat(m_attributeDesc->format()));
+        m_attributeDesc->release();   // the attribute array retains its own copy
     }
-    printf("Stride: %d\n", m_layoutDesc->stride());
-    
-    //m_layoutDescArray->setObject(m_layoutDesc, 0);
+
     pDesc->setVertexDescriptor(m_vertexDesc);
     metalShader->m_pipelineState = m_device->newRenderPipelineState(pDesc, &pError);
+
+    // Release everything owned locally (+1 from alloc()->init() / newFunction()); the pipeline
+    // state captured what it needs. Done on both the success and error paths.
+    if (vertexFunction != nullptr) vertexFunction->release();
+    if (fragFunction != nullptr) fragFunction->release();
+    m_vertexDesc->release();
+    pDesc->release();
+
     if (!metalShader->m_pipelineState)
     {
         printf("Shader Pipeline State Error: %s\n",
@@ -749,7 +783,6 @@ ysError ysMetalDevice::CreateInputLayout(ysInputLayout **newInputLayout, ysShade
         // rather than crashing. Report the error instead of aborting.
         return YDS_ERROR_RETURN(ysError::ApiError);
     }
-    
 
     *newInputLayout = static_cast<ysInputLayout *>(newLayout);
 
@@ -763,18 +796,18 @@ ysError ysMetalDevice::UseInputLayout(ysInputLayout *layout) {
 }
 
 ysError ysMetalDevice::DestroyInputLayout(ysInputLayout *&layout) {
-    return ysError();
+    YDS_ERROR_DECLARE("DestroyInputLayout");
+    if (layout == nullptr) return YDS_ERROR_RETURN(ysError::None);
+    return ysDevice::DestroyInputLayout(layout);
 }
 
 ysError ysMetalDevice::CreateTexture(ysTexture **texture, const char *fname) {
     YDS_ERROR_DECLARE("CreateTexture");
-    printf("texture1\n");
     return YDS_ERROR_RETURN(ysError::None);
 }
 
 ysError ysMetalDevice::CreateTexture(ysTexture **texture, int width, int height, const unsigned char *buffer) {
     YDS_ERROR_DECLARE("CreateTexture");
-    printf("texture2\n");
     return YDS_ERROR_RETURN(ysError::None);
 }
 
@@ -828,7 +861,14 @@ ysError ysMetalDevice::CreateAlphaTexture(ysTexture **texture, int width, int he
 }
 
 ysError ysMetalDevice::DestroyTexture(ysTexture *&texture) {
-    return ysError();
+    YDS_ERROR_DECLARE("DestroyTexture");
+    if (texture == nullptr) return YDS_ERROR_RETURN(ysError::None);
+    ysMetalTexture *metalTexture = static_cast<ysMetalTexture *>(texture);
+    if (metalTexture->m_texture != nullptr) {
+        metalTexture->m_texture->release();   // +1 from newTexture()
+        metalTexture->m_texture = nullptr;
+    }
+    return ysDevice::DestroyTexture(texture);
 }
 
 ysError ysMetalDevice::UseTexture(ysTexture *texture, int slot) {
@@ -843,7 +883,6 @@ ysError ysMetalDevice::UseTexture(ysTexture *texture, int slot) {
 }
 
 ysError ysMetalDevice::UseRenderTargetAsTexture(ysRenderTarget *renderTarget, int slot) {
-    printf("Use render target as texture\n");
     return ysError();
 }
 

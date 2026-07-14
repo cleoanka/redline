@@ -100,7 +100,10 @@ void ysSdlWindow::SetState(WindowState state) {
         SDL_MinimizeWindow(m_window);
         break;
     case WindowState::Closed:
-        SDL_DestroyWindow(m_window);
+        // Destroy the renderer too (it was leaked) and null both handles so later calls
+        // (e.g. GetScreenWidth -> SDL_GetRendererOutputSize) don't use freed pointers.
+        if (m_renderer != nullptr) { SDL_DestroyRenderer(m_renderer); m_renderer = nullptr; }
+        if (m_window != nullptr) { SDL_DestroyWindow(m_window); m_window = nullptr; }
         break;
     case WindowState::Unknown:
         // do nothing
