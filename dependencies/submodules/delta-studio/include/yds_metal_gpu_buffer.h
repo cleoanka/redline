@@ -12,7 +12,7 @@ public:
     virtual ~ysMetalGPUBuffer();
 
 protected:
-    MTL::Buffer* m_buffer[3];
+    MTL::Buffer* m_buffer[3] = {};   // zero-initialise; only [0..kMaxFramesInFlight) are allocated
     bool isConstantBuffer = false;
     char* constantBuffer = nullptr;
 };

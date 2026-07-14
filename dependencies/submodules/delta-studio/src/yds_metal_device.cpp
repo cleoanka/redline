@@ -87,8 +87,17 @@ ysError ysMetalDevice::CreateRenderingContext(ysRenderingContext **renderingCont
     p_depthStencilState = m_device->newDepthStencilState( pDsDesc );
 
     pDsDesc->release();
-    
-    
+
+    // No drawable available yet (rare at startup): defer the encoder; Present() retries.
+    if (m_drawable == nullptr) {
+        pEnc = nullptr;
+        ysMetalContext *deferred = m_renderingContexts.NewGeneric<ysMetalContext>();
+        deferred->m_targetWindow = window;
+        *renderingContext = static_cast<ysRenderingContext *>(deferred);
+        deferred->Create(this, window);
+        return YDS_ERROR_RETURN(ysError::None);
+    }
+
     MTL::RenderPassDepthAttachmentDescriptor* depthDescriptor = pRpd.get()->depthAttachment();
     MTL::TextureDescriptor* depthTextureDesc = MTL::TextureDescriptor::alloc()->init();
     depthTextureDesc->setPixelFormat(MTL::PixelFormatDepth32Float);
@@ -204,6 +213,7 @@ ysError ysMetalDevice::DestroyRenderTarget(ysRenderTarget *&target) {
 ysError ysMetalDevice::SetRenderTarget(ysRenderTarget *target, int slot) {
     YDS_ERROR_DECLARE("SetRenderTarget");
 
+    if (slot < 0 || slot >= MaxRenderTargets) return YDS_ERROR_RETURN(ysError::InvalidParameter);
     m_activeRenderTarget[slot] = target;
     if (target == nullptr || pEnc == nullptr) return YDS_ERROR_RETURN(ysError::None);
     if (slot != 0) return YDS_ERROR_RETURN(ysError::None);
@@ -275,7 +285,14 @@ ysError ysMetalDevice::ClearBuffers(const float *_clearColor) {
 
 ysError ysMetalDevice::Present() {
     YDS_ERROR_DECLARE("Present");
-    pEnc->endEncoding();
+
+    // Throttle the CPU to at most kMaxFramesInFlight frames ahead of the GPU. This is
+    // balanced by the completion handler added to the command buffer we commit below —
+    // every path commits exactly one buffer carrying that handler, so a skipped frame
+    // (null drawable) can never leave the semaphore unbalanced / deadlocked.
+    dispatch_semaphore_wait(_semaphore, DISPATCH_TIME_FOREVER);
+
+    if (pEnc != nullptr) pEnc->endEncoding();
 
     // Env-var-gated offscreen frame capture — reads back the app's own drawable so the
     // render can be verified/recorded without macOS Screen-Recording permission. Format is
@@ -307,7 +324,7 @@ ysError ysMetalDevice::Present() {
         }
     }
     MTL::Texture *redlineCapTex = nullptr;
-    if (redlineCapName[0] != '\0') {
+    if (redlineCapName[0] != '\0' && m_drawable != nullptr) {
         MTL::Texture *src = m_drawable->texture();
         MTL::TextureDescriptor *td = MTL::TextureDescriptor::alloc()->init();
         td->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
@@ -324,7 +341,10 @@ ysError ysMetalDevice::Present() {
         blit->endEncoding();
     }
 
-    pCmd->presentDrawable( m_drawable );
+    if (m_drawable != nullptr) pCmd->presentDrawable( m_drawable );
+    pCmd->addCompletedHandler( ^void( MTL::CommandBuffer* ){
+        dispatch_semaphore_signal(_semaphore);
+    });
     pCmd->commit();
 
     if (redlineCapTex != nullptr) {
@@ -346,16 +366,29 @@ ysError ysMetalDevice::Present() {
         }
         redlineCapTex->release();
     }
-    m_drawable->release();
+    // Release the frame we just submitted.
+    if (m_drawable != nullptr) { m_drawable->release(); m_drawable = nullptr; }
+    if (pEnc != nullptr) { pEnc->release(); pEnc = nullptr; }
+    {
+        MTL::RenderPassDepthAttachmentDescriptor *oldDepth = pRpd.get()->depthAttachment();
+        if (oldDepth != nullptr && oldDepth->texture() != nullptr) oldDepth->texture()->release();
+    }
+
+    // Acquire the next frame's drawable and build its encoder. nextDrawable() returns null
+    // when the window is minimized / occluded / mid-resize or drawables are momentarily
+    // exhausted; in that case skip this frame cleanly (no encoder) — the next Present retries.
     m_drawable = swapchain->nextDrawable();
     pCmd = MTL::make_owned(m_queue->commandBuffer());
-    pEnc->release();
-    MTL::RenderPassDepthAttachmentDescriptor* depthDescriptor = pRpd.get()->depthAttachment();
-    depthDescriptor->texture()->release();
+    if (m_drawable == nullptr) {
+        pEnc = nullptr;
+        return YDS_ERROR_RETURN(ysError::None);
+    }
+    _frame = (_frame + 1) % kMaxFramesInFlight;
+
     pRpd = MTL::make_owned(MTL::RenderPassDescriptor::renderPassDescriptor());
     MTL::RenderPassColorAttachmentDescriptorArray* colorAttachArray = pRpd->colorAttachments();
 
-    depthDescriptor = pRpd.get()->depthAttachment();
+    MTL::RenderPassDepthAttachmentDescriptor* depthDescriptor = pRpd.get()->depthAttachment();
     MTL::TextureDescriptor* depthTextureDesc = MTL::TextureDescriptor::alloc()->init();
     depthTextureDesc->setPixelFormat(MTL::PixelFormatDepth32Float);
     depthTextureDesc->setWidth(m_drawable->texture()->width());
@@ -373,11 +406,6 @@ ysError ysMetalDevice::Present() {
     pEnc = pCmd->renderCommandEncoder( pRpd.get() );
     pEnc->setDepthStencilState(p_depthStencilState);
 
-    dispatch_semaphore_wait( _semaphore, DISPATCH_TIME_FOREVER );
-    _frame = (_frame + 1) % kMaxFramesInFlight;
-    pCmd->addCompletedHandler( ^void( MTL::CommandBuffer* pCmd ){
-        dispatch_semaphore_signal(_semaphore);
-    });
     return YDS_ERROR_RETURN(ysError::None);
 }
 
@@ -497,6 +525,7 @@ ysError ysMetalDevice::CreateConstantBuffer(ysGPUBuffer **newBuffer, int size, c
 ysError ysMetalDevice::UseVertexBuffer(ysGPUBuffer *buffer, int stride, int offset) {
     YDS_ERROR_DECLARE("UseVertexBuffer");
     m_activeVertexBuffer = buffer;
+    if (pEnc == nullptr || buffer == nullptr) return YDS_ERROR_RETURN(ysError::None);
     ysMetalGPUBuffer* metalBuffer = static_cast<ysMetalGPUBuffer*>(buffer);
     MTL::Buffer* buf = metalBuffer->m_buffer[_frame];
     //printf("use metal vertex buff %p, ysBuff: %p, frame %d\n", &buf, &buffer, _frame);
@@ -515,6 +544,7 @@ ysError ysMetalDevice::UseConstantBuffer(ysGPUBuffer *buffer, int slot) {
     YDS_ERROR_DECLARE("UseConstantBuffer");
     //printf("use constant buffer: %d, frame: %d\n", slot, _frame);
     m_activeConstantBuffer = buffer;
+    if (pEnc == nullptr || buffer == nullptr) return YDS_ERROR_RETURN(ysError::None);
     ysMetalGPUBuffer* metalBuffer = static_cast<ysMetalGPUBuffer*>(buffer);
     //MTL::Buffer* buf = metalBuffer->m_buffer[_frame];
     //printf("use metal vertex buff %p, ysBuff: %p\n", &buf, &buffer);
@@ -594,8 +624,12 @@ ysError ysMetalDevice::CreateVertexShader(ysShader **newShader, const char *shad
     delete[] fileBuffer;
     if ( !pLibrary )
     {
-        __builtin_printf( "Metal Shader Error: %s\n", pError->localizedDescription()->utf8String() );
-        assert( false );
+        __builtin_printf( "Metal Shader Error: %s\n",
+            (pError != nullptr && pError->localizedDescription() != nullptr)
+                ? pError->localizedDescription()->utf8String() : "unknown" );
+        // Do not abort or propagate a null library as success — return an error so the
+        // caller can handle it.
+        return YDS_ERROR_RETURN(ysError::ApiError);
     }
     ysMetalShader *newMetalShader = m_shaders.NewGeneric<ysMetalShader>();
     strcpy_s(newMetalShader->m_shaderName, 64, shaderName);
@@ -655,7 +689,12 @@ ysError ysMetalDevice::LinkProgram(ysShaderProgram *program) {
 
 ysError ysMetalDevice::UseShaderProgram(ysShaderProgram * program) {
     YDS_ERROR_DECLARE("UseShaderProgram");
+    if (pEnc == nullptr || program == nullptr) return YDS_ERROR_RETURN(ysError::None);
     ysMetalShaderProgram* metalProgram = static_cast<ysMetalShaderProgram*>(program);
+    // A pipeline state can be null if the shader/pipeline failed to compile; skip rather
+    // than dereference it.
+    if (metalProgram->m_shader == nullptr || metalProgram->m_shader->m_pipelineState == nullptr)
+        return YDS_ERROR_RETURN(ysError::None);
     pEnc->setRenderPipelineState(metalProgram->m_shader->m_pipelineState);
     return YDS_ERROR_RETURN(ysError::None);
 }
@@ -703,8 +742,12 @@ ysError ysMetalDevice::CreateInputLayout(ysInputLayout **newInputLayout, ysShade
     metalShader->m_pipelineState = m_device->newRenderPipelineState(pDesc, &pError);
     if (!metalShader->m_pipelineState)
     {
-        printf("Shader Pipeline State Error: %s\n", pError->localizedDescription()->utf8String());
-        assert(false);
+        printf("Shader Pipeline State Error: %s\n",
+            (pError != nullptr && pError->localizedDescription() != nullptr)
+                ? pError->localizedDescription()->utf8String() : "unknown");
+        // UseShaderProgram null-checks m_pipelineState, so a failed pipeline is skipped
+        // rather than crashing. Report the error instead of aborting.
+        return YDS_ERROR_RETURN(ysError::ApiError);
     }
     
 
@@ -775,9 +818,10 @@ ysError ysMetalDevice::CreateAlphaTexture(ysTexture **texture, int width, int he
 
     MTL::Texture *pTexture = m_device->newTexture( pTextureDesc );
     newTexture->m_texture = pTexture;
-    newTexture->m_texture->replaceRegion( MTL::Region( 0, 0, 0, width, height, 1 ), 0, metalBuf, width * 4); 
+    newTexture->m_texture->replaceRegion( MTL::Region( 0, 0, 0, width, height, 1 ), 0, metalBuf, width * 4);
     pTextureDesc->release();
-    
+    delete[] metalBuf;   // staging buffer was leaked on every glyph/atlas upload
+
     *texture = static_cast<ysTexture *>(newTexture);
 
     return YDS_ERROR_RETURN(ysError::None);
@@ -789,7 +833,7 @@ ysError ysMetalDevice::DestroyTexture(ysTexture *&texture) {
 
 ysError ysMetalDevice::UseTexture(ysTexture *texture, int slot) {
     YDS_ERROR_DECLARE("UseTexture");
-    if (texture != nullptr)
+    if (pEnc != nullptr && texture != nullptr)
     {
         ysMetalTexture* metalTexture = static_cast<ysMetalTexture*>(texture);
         pEnc->setFragmentTexture(metalTexture->m_texture, slot);
@@ -804,10 +848,11 @@ ysError ysMetalDevice::UseRenderTargetAsTexture(ysRenderTarget *renderTarget, in
 }
 
 void ysMetalDevice::Draw(int numFaces, int indexOffset, int vertexOffset) {
-    if (numFaces > 0)
+    if (numFaces > 0 && pEnc != nullptr && m_activeIndexBuffer != nullptr)
     {
         ysMetalGPUBuffer* metalBuffer = static_cast<ysMetalGPUBuffer*>(m_activeIndexBuffer);
         MTL::Buffer* buf = metalBuffer->m_buffer[_frame];
+        if (buf == nullptr) return;
         pEnc->drawIndexedPrimitives(MTL::PrimitiveType::PrimitiveTypeTriangle, numFaces * 3, MTL::IndexType::IndexTypeUInt16, buf, indexOffset * 2, 1, vertexOffset, 0);
     }
     
@@ -842,9 +887,13 @@ int ysMetalDevice::GetStrideOfFormat(MTL::VertexFormat format)
         case MTL::VertexFormat::VertexFormatFloat2:
             return 4*2;
         case MTL::VertexFormat::VertexFormatUInt4:
-            return 4;
+            return 4*4;
         case MTL::VertexFormat::VertexFormatUInt3:
-            return 3;
+            return 4*3;
+        default:
+            // Unknown/invalid format — never fall off the end (undefined return value
+            // corrupts the vertex layout stride).
+            return 0;
     }
 }
 

@@ -113,3 +113,31 @@ void ysSdlWindow::SetState(WindowState state) {
 void ysSdlWindow::SetTitle(std::string title) {
     SDL_SetWindowTitle(m_window, title.c_str());
 }
+
+bool ysSdlWindow::SetWindowStyle(WindowStyle style) {
+    // Actually toggle SDL fullscreen (the base only records the enum), so the F key works.
+    if (m_window != nullptr) {
+        if (style == WindowStyle::Fullscreen) {
+            SDL_SetWindowFullscreen(m_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+        } else if (style == WindowStyle::Windowed) {
+            SDL_SetWindowFullscreen(m_window, 0);
+        }
+    }
+    return ysWindow::SetWindowStyle(style);
+}
+
+int ysSdlWindow::GetScreenWidth() const {
+    if (m_renderer != nullptr) {
+        int w = 0, h = 0;
+        if (SDL_GetRendererOutputSize(m_renderer, &w, &h) == 0 && w > 0) return w;
+    }
+    return m_width;
+}
+
+int ysSdlWindow::GetScreenHeight() const {
+    if (m_renderer != nullptr) {
+        int w = 0, h = 0;
+        if (SDL_GetRendererOutputSize(m_renderer, &w, &h) == 0 && h > 0) return h;
+    }
+    return m_height;
+}

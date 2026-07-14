@@ -42,6 +42,17 @@ const ysKey::Code *ysKeyMaps::GetSdlKeyMap() {
         m_sdlKeyMap[SDL_SCANCODE_KP_4] = ysKey::Code::N4;
         m_sdlKeyMap[SDL_SCANCODE_KP_5] = ysKey::Code::N5;
 
+        // Top-row digits (laptops have no keypad) for time-warp 1..5.
+        m_sdlKeyMap[SDL_SCANCODE_1] = ysKey::Code::N1;
+        m_sdlKeyMap[SDL_SCANCODE_2] = ysKey::Code::N2;
+        m_sdlKeyMap[SDL_SCANCODE_3] = ysKey::Code::N3;
+        m_sdlKeyMap[SDL_SCANCODE_4] = ysKey::Code::N4;
+        m_sdlKeyMap[SDL_SCANCODE_5] = ysKey::Code::N5;
+
+        // Bracket keys for the engine switcher ([ previous, ] next).
+        m_sdlKeyMap[SDL_SCANCODE_LEFTBRACKET] = ysKey::Code::OEM_4;
+        m_sdlKeyMap[SDL_SCANCODE_RIGHTBRACKET] = ysKey::Code::OEM_6;
+
         m_sdlKeyMap[SDL_SCANCODE_UP] = ysKey::Code::Up;
         m_sdlKeyMap[SDL_SCANCODE_DOWN] = ysKey::Code::Down;
         m_sdlKeyMap[SDL_SCANCODE_LEFT] = ysKey::Code::Left;

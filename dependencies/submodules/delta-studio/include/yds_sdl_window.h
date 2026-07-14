@@ -19,6 +19,11 @@ public:
     virtual ysError InitializeWindow(ysWindow *parent, std::string title, WindowStyle style, int x, int y, int width, int height, ysMonitor *monitor) override;
     virtual void SetState(WindowState state) override;
     virtual void SetTitle(std::string title) override;
+    virtual bool SetWindowStyle(WindowStyle style) override;
+    // Report the live Metal drawable size (pixels) so the app tracks live window resizes /
+    // fullscreen changes instead of the size captured once at InitializeWindow.
+    virtual int GetScreenWidth() const override;
+    virtual int GetScreenHeight() const override;
     SDL_Renderer* GetRenderer() const {return m_renderer;}
 
 protected:

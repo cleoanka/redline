@@ -127,22 +127,17 @@ ysError ysSdlAudioSource::Destroy() {
 void ysSdlAudioSource::AddToBuffer(int16_t *audio, int frames) {
     std::lock_guard<std::mutex> guard(m_mutex);
 
+    if (frames <= 0 || m_bufferSize == 0 || m_dataBuffer == nullptr) return;
     ysSdlAudioBuffer *sdlBuffer = static_cast<ysSdlAudioBuffer *>(m_dataBuffer);
     auto *buffer = (int16_t *)sdlBuffer->GetBuffer();
-    const size_t startOffset = m_readPosition % m_bufferSize;
+    if (buffer == nullptr) return;
 
-    // Read the first segment
-    const auto *segment1 = buffer + startOffset;
-    const size_t length1 = std::min(size_t(frames), m_bufferSize - startOffset);
-    for (size_t i = 0; i < length1; i++) {
-        audio[i] += segment1[i];
-    }
-
-    // Read the second segment
-    const auto *segment2 = buffer;
-    const size_t length2 = frames - length1;
-    for (size_t i = 0; i < length2; i++) {
-        audio[i + length1] += segment2[i];
+    // Mix `frames` samples from the source ring into `audio`, wrapping with modulo. This is
+    // correct for any frame count relative to m_bufferSize (the previous two-segment split
+    // read past the ring whenever frames > m_bufferSize) and guards against a zero-size ring.
+    for (int i = 0; i < frames; ++i) {
+        const size_t src = (m_readPosition + (size_t)i) % m_bufferSize;
+        audio[i] += buffer[src];
     }
 
     // Update position

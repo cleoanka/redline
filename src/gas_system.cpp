@@ -595,6 +595,6 @@ double GasSystem::pressureEquilibriumMaxFlow(double P_env, double T_env) const {
     }
     else {
         const double E_k_per_mol_env = 0.5 * T_env * constants::R * m_degreesOfFreedom;
-        return (P_env * (0.5 * m_degreesOfFreedom * volume()) - kineticEnergy()) / E_k_per_mol_env;
+        return -(P_env * (0.5 * m_degreesOfFreedom * volume()) - kineticEnergy()) / E_k_per_mol_env;
     }
 }

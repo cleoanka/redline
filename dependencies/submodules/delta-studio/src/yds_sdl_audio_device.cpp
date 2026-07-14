@@ -27,19 +27,28 @@ ysAudioSource *ysSdlAudioDevice::CreateSource(const ysAudioParameters *parameter
         return nullptr;
     }
 
+    // m_audioSources is iterated by FillBuffer on the SDL audio-callback thread; lock the
+    // device around the structural mutation so the callback can't read a realloc'd array.
+    if (m_deviceId != 0) SDL_LockAudioDevice(m_deviceId);
     ysSdlAudioSource *newSource = m_audioSources.NewGeneric<ysSdlAudioSource>();
 
     newSource->m_bufferSize = size;
     newSource->m_audioParameters = *parameters;
     newSource->m_safeWriteFrames = m_outputFormat.size /
         (m_outputFormat.channels * SDL_AUDIO_BITSIZE(m_outputFormat.format) / 8);
+    if (m_deviceId != 0) SDL_UnlockAudioDevice(m_deviceId);
 
     return newSource;
 }
 
 ysAudioSource *ysSdlAudioDevice::CreateSource(ysAudioBuffer *sourceBuffer) {
+    // Hold the device lock across create + SetDataBuffer so the callback never sees a
+    // source that is in the list but has no data buffer yet. SDL_LockAudioDevice is
+    // recursive, so the nested lock in the other overload is fine.
+    if (m_deviceId != 0) SDL_LockAudioDevice(m_deviceId);
     ysAudioSource *newSource = CreateSource(sourceBuffer->GetAudioParameters(), sourceBuffer->GetSampleCount());
-    newSource->SetDataBuffer(sourceBuffer);
+    if (newSource != nullptr) newSource->SetDataBuffer(sourceBuffer);
+    if (m_deviceId != 0) SDL_UnlockAudioDevice(m_deviceId);
 
     return newSource;
 }

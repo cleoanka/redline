@@ -27,7 +27,10 @@ ysErrorSystem *ysErrorSystem::GetInstance() {
 }
 
 void ysErrorSystem::Destroy() {
-    delete [] g_instance;
+    // g_instance is created with scalar `new` (GetInstance), so free it with scalar delete,
+    // not delete[] (undefined behavior), and clear the dangling singleton pointer.
+    delete g_instance;
+    g_instance = nullptr;
 }
 
 ysError ysErrorSystem::RaiseError(ysError error, unsigned int line, ysObject *object, const char *file, const char *msg, bool affectStack) {
