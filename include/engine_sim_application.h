@@ -22,6 +22,7 @@
 #include "info_cluster.h"
 #include "application_settings.h"
 #include "transmission.h"
+#include "gamepad_input.h"
 
 #include "delta.h"
 #include "dtv.h"
@@ -93,10 +94,16 @@ class EngineSimApplication {
         void processEngineInput();
         void renderScene();
 
-        // Cycle to another built-in engine at runtime ([ / ] keys). direction: +1 next,
-        // -1 previous. Rewrites main.mr with the chosen preset and reloads.
+        // Cycle to another built-in engine at runtime (O / P or bumpers). direction:
+        // +1 next, -1 previous. Rewrites main.mr with the chosen preset and reloads.
         void switchEngine(int direction);
         int m_enginePresetIndex = 0;
+
+        // Xbox / SDL2 game controller. updated once per frame in run(); throttle/clutch/
+        // starter/etc. applied in processEngineInput(); engine-switch handled in run().
+        void processGamepadInput();
+        GamepadInput m_gamepad;
+        double m_gamepadSimSpeed = 0.0;   // right-stick time-warp override; 0 == unset
 
         void refreshUserInterface();
 

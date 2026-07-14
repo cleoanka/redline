@@ -4,7 +4,37 @@ All notable changes to redline. Format loosely follows Keep a Changelog.
 
 ## [Unreleased]
 
-### Fixed
+### Added
+- **Xbox / SDL2 game-controller support** (`src/gamepad_input.*`): analog throttle (RT)
+  and clutch (LT), A=starter, B=ignition, X=dyno, Y=reload, RB/LB=next/prev engine,
+  D-pad=gears, sticks=volume/time-warp, Start=pause. Poll-based (immune to the shared
+  SDL event queue), hot-plug via periodic re-scan, radial stick dead-zone; keyboard and
+  pad compose.
+
+### Fixed (adversarial audit hardening pass — a multi-agent + AddressSanitizer sweep)
+- **Crash on minimize / alt-tab / Mission Control / resize:** `CAMetalLayer.nextDrawable()`
+  returns null when the window is occluded; the Metal backend then dereferenced it. Now
+  skips the frame cleanly (null-safe encoder, guarded draw path) and retries next frame,
+  with a corrected frame-pacing semaphore that stays balanced across a skipped frame.
+- **Shader/pipeline compile failure aborted (or null-deref'd in release)** via `assert(false)`
+  → now returns an error and the draw is skipped.
+- **Physics sign bug** in `gas_system.cpp` `pressureEquilibriumMaxFlow` (missing negation
+  in the below-ambient branch; fixed upstream) → corrected.
+- **Undefined behavior / heap issues:** scalar-`new` freed with `delete[]` in
+  `ysErrorSystem::Destroy`; uninitialized `ysMetalGPUBuffer::m_buffer[3]`; `SetRenderTarget`
+  out-of-bounds write before its slot check; `GetStrideOfFormat` fell off the end (+ wrong
+  UInt sizes); per-glyph staging-buffer leak in `CreateAlphaTexture`.
+- **Audio thread-safety:** the SDL audio-callback thread iterated the source list while the
+  sim thread could reallocate it (use-after-free on engine start / gear change / switch) →
+  `SDL_LockAudioDevice` around source add + data-buffer assignment. `AddToBuffer` could read
+  past the source ring when the mix buffer was larger → rewritten with modulo indexing and a
+  zero-size guard.
+- **Fullscreen (F) and live resize were no-ops:** `F` now actually toggles SDL fullscreen,
+  and the window reports its live drawable size so the projection tracks resizes instead of
+  distorting.
+- **Keymap:** `[`/`]` (engine switch) and top-row `1`–`5` (time-warp) were unmapped on
+  laptops (keypad-only) → added. Division-by-zero guards on the engine-view bounds.
+
 - **Random crash after a few seconds (heap corruption).** The Metal `ResizeRenderTarget`
   (called every frame from the engine-view camera path) ran `YDS_ERROR_DECLARE` — which
   pushes onto delta-studio's error call-stack — but returned without `YDS_ERROR_RETURN`,

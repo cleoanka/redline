@@ -109,6 +109,21 @@ Minimal, keyboard-driven:
 > built-in engines (Chevy 454 V8, Hayabusa I4, 2JZ I6, LFA V10, Merlin V12, radials, …).
 > No file editing. (`[` / `]` also work on a US keyboard.)
 
+### Gamepad (Xbox controller)
+
+Plug in an Xbox (or any SDL-recognised) controller — hot-plug works, no config:
+
+| Control | Action | Control | Action |
+| :-- | :-- | :-- | :-- |
+| **Right trigger** | Analog throttle | **Left trigger** | Clutch |
+| **A** | Starter (hold) | **B** | Ignition |
+| **X** | Dyno | **Y** | Reload engine |
+| **RB / LB** | Next / previous engine | **D-pad ↑/↓** | Shift gear |
+| **Left stick ↕** | Volume | **Right stick ↕** | Time-warp |
+| **Start** | Pause | | |
+
+Keyboard and gamepad compose — either works at any time.
+
 <details>
 <summary><b>Headless capture &amp; demo knobs</b> (how the GIFs above were made)</summary>
 

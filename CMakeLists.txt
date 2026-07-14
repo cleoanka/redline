@@ -208,6 +208,7 @@ add_executable(engine-sim-app WIN32
     # Source files
     src/main.cpp
     src/engine_sim_application.cpp
+    src/gamepad_input.cpp
     src/geometry_generator.cpp
     src/simulation_object.cpp
     src/piston_object.cpp
@@ -285,6 +286,13 @@ endif (PIRANHA_ENABLED)
 
 target_include_directories(engine-sim-app
     PUBLIC dependencies/submodules)
+
+# The app itself uses SDL2 directly for game-controller input (src/gamepad_input.cpp).
+# delta-core keeps its SDL2 includes PRIVATE, so expose them to the app target too.
+find_package(SDL2 QUIET HINTS "/opt/homebrew/Cellar" "/opt/homebrew")
+if (SDL2_FOUND)
+    target_include_directories(engine-sim-app PRIVATE ${SDL2_INCLUDE_DIRS})
+endif()
 
 add_subdirectory(dependencies)
 

@@ -154,6 +154,8 @@ void EngineSimApplication::initialize(void *instance, ysContextObject::DeviceAPI
 }
 
 void EngineSimApplication::initialize() {
+    m_gamepad.initialize();
+
     m_shaders.SetClearColor(ysColor::srgbiToLinear(0x34, 0x98, 0xdb));
     m_assetManager.CompileInterchangeFile((m_assetPath + "/assets").c_str(), 1.0f, true);
     m_assetManager.LoadSceneFile((m_assetPath + "/assets").c_str(), true);
@@ -216,6 +218,10 @@ void EngineSimApplication::process(float frame_dt) {
     else if (m_engine.IsKeyDown(ysKey::Code::N5)) {
         speed = 1 / 1000.0;
     }
+
+    // Right-stick time-warp override from the gamepad (set in processGamepadInput, which
+    // runs earlier this frame); 0 means the keyboard 1-5 keys are in charge.
+    if (m_gamepadSimSpeed > 0.0) speed = m_gamepadSimSpeed;
 
     m_simulator.setSimulationSpeed(speed);
 
@@ -359,11 +365,14 @@ void EngineSimApplication::render() {
 }
 
 float EngineSimApplication::pixelsToUnits(float pixels) const {
-    const float f = m_displayHeight / m_engineView->m_bounds.height();
+    const float boundsHeight = m_engineView->m_bounds.height();
+    if (boundsHeight == 0.0f) return 0.0f;   // engine view not sized yet (or minimized)
+    const float f = m_displayHeight / boundsHeight;
     return pixels * f;
 }
 
 float EngineSimApplication::unitsToPixels(float units) const {
+    if (m_displayHeight == 0.0f) return 0.0f;
     const float f = m_engineView->m_bounds.height() / m_displayHeight;
     return units * f;
 }
@@ -373,11 +382,21 @@ void EngineSimApplication::run() {
         m_engine.StartFrame();
 
         if (!m_engine.IsOpen()) break;
+
+        // Refresh the game controller once per frame (also handles hot-plug).
+        m_gamepad.update();
+
         if (m_engine.ProcessKeyDown(ysKey::Code::Escape)) {
             break;
         }
 
-        if (m_engine.ProcessKeyDown(ysKey::Code::Return)) {
+        // Controller: bumpers cycle engines (like O / P); Y reloads the script; Start pauses.
+        if (m_gamepad.wasPressed(GamepadInput::Button::RightBumper)) switchEngine(1);
+        if (m_gamepad.wasPressed(GamepadInput::Button::LeftBumper)) switchEngine(-1);
+        if (m_gamepad.wasPressed(GamepadInput::Button::Start)) m_paused = !m_paused;
+
+        if (m_engine.ProcessKeyDown(ysKey::Code::Return)
+                || m_gamepad.wasPressed(GamepadInput::Button::Y)) {
             m_audioSource->SetMode(ysAudioSource::Mode::Stop);
             loadScript();
             if (m_simulator.getEngine() != nullptr) {
@@ -454,6 +473,8 @@ void EngineSimApplication::run() {
 }
 
 void EngineSimApplication::destroy() {
+    m_gamepad.shutdown();
+
     m_shaderSet.Destroy();
 
     m_engine.GetDevice()->DestroyGPUBuffer(m_geometryVertexBuffer);
@@ -1015,6 +1036,71 @@ void EngineSimApplication::processEngineInput() {
     const double clutch_s = dt / (dt + clutchRC);
     m_clutchPressure = m_clutchPressure * (1 - clutch_s) + m_targetClutchPressure * clutch_s;
     m_simulator.getTransmission()->setClutchPressure(m_clutchPressure);
+
+    processGamepadInput();
+}
+
+void EngineSimApplication::processGamepadInput() {
+    if (!m_gamepad.isConnected() || m_iceEngine == nullptr) return;
+
+    // Analog throttle on the right trigger (direct, no smoothing — the trigger is already
+    // analog). Right trigger takes over only while pressed, so the keyboard still works.
+    const float rt = m_gamepad.getRightTrigger();
+    if (rt > 0.0f) {
+        m_speedSetting = rt;
+        m_targetSpeedSetting = rt;
+        m_iceEngine->setSpeedControl(m_speedSetting);
+    }
+
+    // Clutch pedal on the left trigger (pressed = disengaged). Only overrides while used.
+    const float lt = m_gamepad.getLeftTrigger();
+    if (lt > 0.0f) {
+        m_clutchPressure = 1.0 - (double)lt;
+        m_targetClutchPressure = m_clutchPressure;
+        m_simulator.getTransmission()->setClutchPressure(m_clutchPressure);
+    }
+
+    // A = starter (hold), B = ignition (toggle), X = dyno (toggle).
+    if (m_gamepad.isDown(GamepadInput::Button::A)) {
+        m_simulator.m_starterMotor.m_enabled = true;
+    }
+    if (m_gamepad.wasPressed(GamepadInput::Button::B)) {
+        auto *ignition = m_simulator.getEngine()->getIgnitionModule();
+        ignition->m_enabled = !ignition->m_enabled;
+        m_infoCluster->setLogMessage(ignition->m_enabled ? "IGNITION ENABLED" : "IGNITION DISABLED");
+    }
+    if (m_gamepad.wasPressed(GamepadInput::Button::X)) {
+        m_simulator.m_dyno.m_enabled = !m_simulator.m_dyno.m_enabled;
+        m_infoCluster->setLogMessage(m_simulator.m_dyno.m_enabled ? "DYNOMOMETER ENABLED" : "DYNOMOMETER DISABLED");
+    }
+
+    // D-pad up/down = shift gears.
+    if (m_gamepad.wasPressed(GamepadInput::Button::DpadUp)) {
+        m_simulator.getTransmission()->changeGear(m_simulator.getTransmission()->getGear() + 1);
+    }
+    if (m_gamepad.wasPressed(GamepadInput::Button::DpadDown)) {
+        m_simulator.getTransmission()->changeGear(m_simulator.getTransmission()->getGear() - 1);
+    }
+
+    const float dt = m_engine.GetFrameLength();
+
+    // Left stick Y = master volume (push up louder). Deadzone applied in getLeftStickY().
+    const float ly = m_gamepad.getLeftStickY();
+    if (ly != 0.0f) {
+        Synthesizer::AudioParameters ap = m_simulator.getSynthesizer()->getAudioParameters();
+        ap.Volume = clamp(ap.Volume - (double)ly * 0.75 * dt);
+        m_simulator.getSynthesizer()->setAudioParameters(ap);
+    }
+
+    // Right stick Y = time-warp (up = slower motion). Sets an override consumed in
+    // process(); resets to 0 (keyboard 1-5 back in charge) when the stick re-centres.
+    const float ry = m_gamepad.getRightStickY();
+    if (ry != 0.0f) {
+        // ry in (0..1] up -> slow down to ~1/1000; (-1..0) down -> real time.
+        m_gamepadSimSpeed = clamp(std::pow(10.0, -(double)ry * 3.0), 1.0 / 1000.0, 1.0);
+    } else {
+        m_gamepadSimSpeed = 0.0;
+    }
 }
 
 void EngineSimApplication::renderScene() {
@@ -1101,8 +1187,9 @@ void EngineSimApplication::renderScene() {
         m_infoCluster->setVisible(false);
     }
 
+    const float engineViewHeight = m_engineView->m_bounds.height();
     const float cameraAspectRatio =
-        m_engineView->m_bounds.width() / m_engineView->m_bounds.height();
+        (engineViewHeight != 0.0f) ? (m_engineView->m_bounds.width() / engineViewHeight) : 1.0f;
     m_engine.GetDevice()->ResizeRenderTarget(
         m_mainRenderTarget,
         m_engineView->m_bounds.width(),
@@ -1194,7 +1281,7 @@ bool EngineSimApplication::readyToRecord() {
     const int w = m_screenResolution[0][0];
     const int h = m_screenResolution[0][1];
 
-    if (w <= 0 && h <= 0) return false;
+    if (w <= 0 || h <= 0) return false;
     if ((w % 2) != 0 || (h % 2) != 0) return false;
 
     for (int i = 1; i < ScreenResolutionHistoryLength; ++i) {
