@@ -390,9 +390,11 @@ void EngineSimApplication::run() {
             if (m_screen > 2) m_screen = 0;
         }
 
-        // [ / ] cycle through the built-in engines at runtime.
-        if (m_engine.ProcessKeyDown(ysKey::Code::OEM_6)) switchEngine(1);
-        if (m_engine.ProcessKeyDown(ysKey::Code::OEM_4)) switchEngine(-1);
+        // Cycle through the built-in engines at runtime. Keys are read by physical
+        // position (SDL scancodes), so O/P (next to each other on every layout) are the
+        // portable choice; [ and ] also work on a US layout.
+        if (m_engine.ProcessKeyDown(ysKey::Code::P) || m_engine.ProcessKeyDown(ysKey::Code::OEM_6)) switchEngine(1);
+        if (m_engine.ProcessKeyDown(ysKey::Code::O) || m_engine.ProcessKeyDown(ysKey::Code::OEM_4)) switchEngine(-1);
 
         if (m_engine.ProcessKeyDown(ysKey::Code::F)) {
             if (m_engine.GetGameWindow()->GetWindowStyle() != ysWindow::WindowStyle::Fullscreen) {
@@ -702,7 +704,7 @@ void EngineSimApplication::switchEngine(int direction) {
     if (m_infoCluster != nullptr) {
         m_infoCluster->setLogMessage(
             "[" + std::to_string(m_enginePresetIndex + 1) + "/" + std::to_string(n) + "] "
-            + preset.name + "  ([ / ] to change engine)");
+            + preset.name + "   (O / P to change engine)");
     }
 }
 
