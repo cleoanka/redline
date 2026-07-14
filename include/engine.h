@@ -16,6 +16,9 @@
 #include "throttle.h"
 
 #include <string>
+#include <vector>
+
+class Function;
 
 class Engine : public Part {
     public:
@@ -46,6 +49,11 @@ class Engine : public Part {
 
         void initialize(const Parameters &params);
         virtual void destroy();
+
+        // Takes ownership of a shared curve (lobe profile, flow/timing curve, ...) that the
+        // script's EngineContext deduplicated. The context is a transient stack local, so the
+        // engine must own these for its lifetime and free them in destroy().
+        void addFunction(Function *function) { m_functions.push_back(function); }
 
         std::string getName() const { return m_name; }
 
@@ -132,6 +140,9 @@ class Engine : public Part {
         Fuel m_fuel;
 
         Throttle *m_throttle;
+
+        // Shared curves owned by the engine (see addFunction). Freed in destroy().
+        std::vector<Function *> m_functions;
 
         double m_throttleValue;
         double m_displacement;

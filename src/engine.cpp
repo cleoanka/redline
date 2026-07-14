@@ -3,6 +3,7 @@
 #include "../include/constants.h"
 #include "../include/units.h"
 #include "../include/fuel.h"
+#include "../include/function.h"
 
 #include <cmath>
 #include <assert.h>
@@ -112,6 +113,16 @@ void Engine::destroy() {
     if (m_exhaustSystems != nullptr) delete[] m_exhaustSystems;
     if (m_intakes != nullptr) delete[] m_intakes;
     if (m_combustionChambers != nullptr) delete[] m_combustionChambers;
+
+    // Free the shared curves last: the engine sub-objects destroyed above (camshaft lobe
+    // profiles, port-flow curves, ...) reference these, so they must outlive them.
+    for (Function *function : m_functions) {
+        if (function != nullptr) {
+            function->destroy();
+            delete function;
+        }
+    }
+    m_functions.clear();
 
     m_crankshafts = nullptr;
     m_cylinderBanks = nullptr;

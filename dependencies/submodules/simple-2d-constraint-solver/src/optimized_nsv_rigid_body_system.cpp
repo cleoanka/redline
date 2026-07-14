@@ -27,6 +27,11 @@ atg_scs::OptimizedNsvRigidBodySystem::~OptimizedNsvRigidBodySystem() {
     m_iv.F_C.destroy();
     m_iv.R.destroy();
     m_iv.lambda.destroy();
+
+    // The SLE solver is handed to initialize() and owned here; free it (it was leaked on
+    // every simulator teardown / engine reload otherwise).
+    delete m_sleSolver;
+    m_sleSolver = nullptr;
 }
 
 void atg_scs::OptimizedNsvRigidBodySystem::initialize(SleSolver *sleSolver) {

@@ -24,7 +24,10 @@ CylinderHead::CylinderHead() {
 }
 
 CylinderHead::~CylinderHead() {
-    /* void */
+    // Engine::destroy() frees the head array with delete[], which runs this destructor but
+    // never calls destroy() explicitly. Delegate so the cylinders and the owned valvetrain
+    // are released instead of leaking on every engine (re)load.
+    destroy();
 }
 
 void CylinderHead::initialize(const Parameters &params) {
@@ -44,8 +47,14 @@ void CylinderHead::initialize(const Parameters &params) {
 }
 
 void CylinderHead::destroy() {
-    if (m_cylinders != nullptr) delete[] m_cylinders;
+    // Idempotent: null-after-free so a later ~CylinderHead re-entry is a no-op. The
+    // valvetrain (and, through its virtual destructor, its camshafts) is owned here — it was
+    // new'd by the valvetrain script node and handed to us via initialize().
+    delete[] m_cylinders;
     m_cylinders = nullptr;
+
+    delete m_valvetrain;
+    m_valvetrain = nullptr;
 }
 
 double CylinderHead::intakeFlowRate(int cylinder) const {

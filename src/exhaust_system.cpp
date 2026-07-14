@@ -48,13 +48,23 @@ void ExhaustSystem::initialize(const Parameters &params) {
     m_outletFlowRate = params.outletFlowRate;
     m_collectorCrossSectionArea = params.collectorCrossSectionArea;
     m_velocityDecay = params.velocityDecay;
+    // The bank generator calls generate() once per cylinder sharing this exhaust, and each
+    // call hands us a freshly-allocated impulse response — free the previous one so the
+    // earlier allocations aren't orphaned (they were leaking, one per shared cylinder).
+    if (m_impulseResponse != nullptr && m_impulseResponse != params.impulseResponse) {
+        delete m_impulseResponse;
+    }
     m_impulseResponse = params.impulseResponse;
     m_length = params.length;
     m_primaryTubeLength = params.primaryTubeLength;
 }
 
 void ExhaustSystem::destroy() {
-    /* void */
+    // The impulse response is new'd fresh per exhaust by the script node (its context cache
+    // is never populated, so there is no sharing) and owned here. Engine::destroy() calls
+    // this on every reload, so freeing it stops a per-reload leak.
+    delete m_impulseResponse;
+    m_impulseResponse = nullptr;
 }
 
 void ExhaustSystem::process(double dt) {

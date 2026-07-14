@@ -107,12 +107,19 @@ namespace es_script {
 
             m_ignitionModule->generate(engine, &context);
             
-            Function *meanPistonSpeedToTurbulence = new Function;
-            meanPistonSpeedToTurbulence->initialize(30, 1);
-            for (int i = 0; i < 30; ++i) {
-                const double s = (double)i;
-                meanPistonSpeedToTurbulence->addSample(s, s * 0.5);
-            }
+            // Shared, immutable turbulence curve: it is identical for every engine and only
+            // ever read (CombustionChamber::sampleTriangle), so build it once for the whole
+            // process instead of leaking a fresh copy on every engine (re)load. The magic
+            // static guarantees thread-safe one-time init.
+            static Function *const meanPistonSpeedToTurbulence = [] {
+                Function *f = new Function;
+                f->initialize(30, 1);
+                for (int i = 0; i < 30; ++i) {
+                    const double s = (double)i;
+                    f->addSample(s, s * 0.5);
+                }
+                return f;
+            }();
 
             Fuel *fuel = engine->getFuel();
             m_fuel->generate(fuel, &context);
@@ -128,6 +135,13 @@ namespace es_script {
                 ccParams.Piston = engine->getPiston(i);
                 ccParams.Head = engine->getHead(ccParams.Piston->getCylinderBank()->getIndex());
                 engine->getChamber(i)->initialize(ccParams);
+            }
+
+            // Hand ownership of the deduplicated curves (lobe profiles, flow/timing curves)
+            // to the engine before this stack-local context — the only registry of them — is
+            // destroyed. The engine frees them in destroy(), ending a per-reload leak.
+            for (const auto &entry : context.getFunctions()) {
+                engine->addFunction(entry.second);
             }
         }
 

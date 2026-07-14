@@ -8,7 +8,12 @@ StandardValvetrain::StandardValvetrain() {
 }
 
 StandardValvetrain::~StandardValvetrain() {
-    /* void */
+    // The camshafts are new'd by the valvetrain script node and handed to us; we own them.
+    // destroy() releases their lobe-angle buffers before we free the objects themselves.
+    if (m_intakeCamshaft != nullptr) { m_intakeCamshaft->destroy(); delete m_intakeCamshaft; }
+    if (m_exhaustCamshaft != nullptr) { m_exhaustCamshaft->destroy(); delete m_exhaustCamshaft; }
+    m_intakeCamshaft = nullptr;
+    m_exhaustCamshaft = nullptr;
 }
 
 void StandardValvetrain::initialize(const Parameters &params) {

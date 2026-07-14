@@ -8,7 +8,8 @@ JitterFilter::JitterFilter() {
 }
 
 JitterFilter::~JitterFilter() {
-    /* void */
+    delete[] m_history;   // was never freed -> leaked per audio channel every reload
+    m_history = nullptr;
 }
 
 void JitterFilter::initialize(

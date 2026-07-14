@@ -8,7 +8,11 @@ atg_scs::GenericRigidBodySystem::GenericRigidBodySystem() {
 }
 
 atg_scs::GenericRigidBodySystem::~GenericRigidBodySystem() {
-    /* void */
+    // Both solvers are handed to initialize() and owned here; free them (leaked otherwise).
+    delete m_sleSolver;
+    delete m_odeSolver;
+    m_sleSolver = nullptr;
+    m_odeSolver = nullptr;
 }
 
 void atg_scs::GenericRigidBodySystem::initialize(

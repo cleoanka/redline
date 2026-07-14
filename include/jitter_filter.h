@@ -55,7 +55,7 @@ protected:
     float m_jitterScale;
     int m_maxJitter;
     int m_offset;
-    float *m_history;
+    float *m_history = nullptr;
 
     std::default_random_engine m_generator;
 };

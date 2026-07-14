@@ -28,6 +28,8 @@ class ConnectingRod : public Part {
         ConnectingRod();
         virtual ~ConnectingRod();
 
+        virtual void destroy();
+
         void initialize(const Parameters &params);
 
         double getBigEndLocal() const;

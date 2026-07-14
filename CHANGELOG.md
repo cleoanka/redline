@@ -11,6 +11,37 @@ All notable changes to redline. Format loosely follows Keep a Changelog.
   SDL event queue), hot-plug via periodic re-scan, radial stick dead-zone; keyboard and
   pad compose.
 
+### Fixed (exhaustive teardown & hot-reload hardening — AddressSanitizer + `leaks` sweep)
+- **Use-after-free in the SDL audio callback on shutdown.** `SDL_CloseAudioDevice` was never
+  called, so the CoreAudio callback thread kept running `ysSdlAudioDevice::FillBuffer` (which
+  iterates the source list) after teardown had freed that list. Caught under lldb
+  (`__asan_report_load4` → `FillBuffer`). Now the device is closed in `DisconnectDevice`
+  (before anything frees the sources) with a destructor safety net. 10/10 clean ASan runs.
+- **Crash during teardown from uninitialized shader handles.** `DeltaEngine`'s constructor
+  left `m_vertexSkinnedShader`, `m_saqVertexShader`, `m_saqPixelShader` (and the console
+  constant buffer) uninitialized; `Destroy()` unconditionally destroys all of them, so once
+  teardown was allowed to complete it dereferenced garbage. Null-initialized in-class.
+- **Metal teardown aborted early.** `Destroy{Shader,ShaderProgram,InputLayout,Texture,`
+  `RenderTarget,GPUBuffer}` returned `InvalidParameter` for a null handle, so delta-engine's
+  teardown chain bailed at the first unused resource and skipped the rest → now a null handle
+  is a no-op (`None`) and the whole chain runs.
+- **Synthesizer data race.** The audio thread read `m_audioParameters` unlocked while
+  `setAudioParameters` wrote it. Now snapshotted under the lock into an audio-thread-private
+  copy before the unlocked render loop.
+- **Use-after-free on window close** — `ysSdlWindow` freed the SDL renderer's window but left
+  the renderer (leaked) and both handles dangling for later `GetScreenWidth` calls.
+- **Engine switch on a read-only mount** advanced the index/label even when the `main.mr`
+  write failed (desyncing the label from the reloaded engine) → only commits on success.
+- **Per-reload memory leaks** (engine hot-reload re-ran the load path every switch, so
+  upstream one-time allocations became unbounded): valvetrains + their camshafts (now owned
+  and freed by the cylinder head), shared curve `Function`s (ownership transferred from the
+  transient script `EngineContext` to the `Engine`, freed in `Engine::destroy`),
+  `ImpulseResponse`s (freed by the exhaust system), the `CreateInputLayout` Metal descriptors
+  and shader functions, and the `LoadFont` bitmap + `FILE` handle.
+- **Polish:** removed per-reload / startup debug `printf` spam from the Metal backend and
+  engine init; added a `REDLINE_MAXFRAMES` env hook for headless/CI/ASan runs; `override` on
+  `ConvolutionFilter::destroy`.
+
 ### Fixed (adversarial audit hardening pass — a multi-agent + AddressSanitizer sweep)
 - **Crash on minimize / alt-tab / Mission Control / resize:** `CAMetalLayer.nextDrawable()`
   returns null when the window is occluded; the Metal backend then dereferenced it. Now

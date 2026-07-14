@@ -42,6 +42,10 @@ namespace es_script {
         void addFunction(FunctionNode *node, Function *function);
         Function *getFunction(FunctionNode *node) const;
 
+        // The unique set of deduplicated functions this context created, so their ownership
+        // can be handed to the engine before the (stack-local) context is destroyed.
+        const std::map<FunctionNode *, Function *> &getFunctions() const { return m_functions; }
+
         void addImpulseResponse(ImpulseResponseNode *node, ImpulseResponse *impulse);
         ImpulseResponse *getImpulseResponse(ImpulseResponseNode *node) const;
 

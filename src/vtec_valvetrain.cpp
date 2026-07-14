@@ -1,6 +1,7 @@
 #include "../include/vtec_valvetrain.h"
 
 #include "../include/engine.h"
+#include "../include/camshaft.h"
 
 VtecValvetrain::VtecValvetrain() {
     m_intakeCamshaft = nullptr;
@@ -18,7 +19,18 @@ VtecValvetrain::VtecValvetrain() {
 }
 
 VtecValvetrain::~VtecValvetrain() {
-    /* void */
+    // We own all four camshafts (new'd by the VTEC valvetrain script node and handed to us).
+    // destroy() releases each lobe-angle buffer before we free the object. m_engine is a
+    // back-reference we do not own.
+    Camshaft *cams[] = {
+        m_intakeCamshaft, m_exhaustCamshaft, m_vtecIntakeCamshaft, m_vtecExhaustCamshaft };
+    for (Camshaft *cam : cams) {
+        if (cam != nullptr) { cam->destroy(); delete cam; }
+    }
+    m_intakeCamshaft = nullptr;
+    m_exhaustCamshaft = nullptr;
+    m_vtecIntakeCamshaft = nullptr;
+    m_vtecExhaustCamshaft = nullptr;
 }
 
 void VtecValvetrain::initialize(const Parameters &parameters) {

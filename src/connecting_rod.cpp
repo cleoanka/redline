@@ -22,6 +22,13 @@ ConnectingRod::~ConnectingRod() {
     /* void */
 }
 
+void ConnectingRod::destroy() {
+    // Frees the per-rod journal-angle array that initialize() allocates. Engine::destroy()
+    // calls this on every reload; without the override it leaked (matches Crankshaft).
+    if (m_rodJournalAngles != nullptr) delete[] m_rodJournalAngles;
+    m_rodJournalAngles = nullptr;
+}
+
 void ConnectingRod::initialize(const Parameters &params) {
     m_centerOfMass = params.CenterOfMass;
     m_length = params.Length;
