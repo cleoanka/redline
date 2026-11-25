@@ -102,7 +102,14 @@ ysError ysMetalDevice::CreateRenderingContext(ysRenderingContext **renderingCont
     depthTextureDesc->setWidth(m_drawable->texture()->width());
     depthTextureDesc->setHeight(m_drawable->texture()->height());
     depthTextureDesc->setUsage(MTL::TextureUsageRenderTarget);
-    depthDescriptor->setTexture(m_device->newTexture(depthTextureDesc));
+    {
+        // newTexture() returns +1; the attachment retains its own reference, so drop ours
+        // here and let the render pass descriptor be the texture's sole owner. It is then
+        // released exactly once, when pRpd is replaced or the device is destroyed.
+        MTL::Texture *depthTexture = m_device->newTexture(depthTextureDesc);
+        depthDescriptor->setTexture(depthTexture);
+        depthTexture->release();
+    }
     depthTextureDesc->release();
     MTL::RenderPassColorAttachmentDescriptorArray* colorAttachArray = pRpd->colorAttachments();
     auto colorAttachDesc = pRpd.get()->colorAttachments()->object(0);// MTL::make_owned(MTL::RenderPassColorAttachmentDescriptor::alloc()->init());
@@ -371,10 +378,6 @@ ysError ysMetalDevice::Present() {
     // Release the frame we just submitted.
     if (m_drawable != nullptr) { m_drawable->release(); m_drawable = nullptr; }
     if (pEnc != nullptr) { pEnc->release(); pEnc = nullptr; }
-    {
-        MTL::RenderPassDepthAttachmentDescriptor *oldDepth = pRpd.get()->depthAttachment();
-        if (oldDepth != nullptr && oldDepth->texture() != nullptr) oldDepth->texture()->release();
-    }
 
     // Acquire the next frame's drawable and build its encoder. nextDrawable() returns null
     // when the window is minimized / occluded / mid-resize or drawables are momentarily
@@ -396,7 +399,14 @@ ysError ysMetalDevice::Present() {
     depthTextureDesc->setWidth(m_drawable->texture()->width());
     depthTextureDesc->setHeight(m_drawable->texture()->height());
     depthTextureDesc->setUsage(MTL::TextureUsageRenderTarget);
-    depthDescriptor->setTexture(m_device->newTexture(depthTextureDesc));
+    {
+        // newTexture() returns +1; the attachment retains its own reference, so drop ours
+        // here and let the render pass descriptor be the texture's sole owner. It is then
+        // released exactly once, when pRpd is replaced or the device is destroyed.
+        MTL::Texture *depthTexture = m_device->newTexture(depthTextureDesc);
+        depthDescriptor->setTexture(depthTexture);
+        depthTexture->release();
+    }
     depthTextureDesc->release();
 
     auto colorAttachDesc = pRpd.get()->colorAttachments()->object(0);
