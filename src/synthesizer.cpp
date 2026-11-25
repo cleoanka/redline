@@ -111,7 +111,15 @@ void Synthesizer::startAudioRenderingThread() {
 
 void Synthesizer::endAudioRenderingThread() {
     if (m_thread != nullptr) {
-        m_run = false;
+        // The render thread waits on m_cv0 under m_lock0 with a predicate that reads
+        // m_run, so the flag must change under that same mutex; otherwise the store and
+        // the notify can land between the predicate check and the sleep, the wakeup is
+        // lost and join() below blocks forever.
+        {
+            std::lock_guard<std::mutex> lock(m_lock0);
+            m_run = false;
+        }
+        m_cv0.notify_all();
         endInputBlock();
 
         m_thread->join();
