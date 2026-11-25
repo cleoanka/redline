@@ -216,7 +216,9 @@ ysError ysMetalDevice::DestroyRenderTarget(ysRenderTarget *&target) {
     if (target == nullptr) return YDS_ERROR_RETURN(ysError::None);
     // On-screen/subdivision targets borrow the drawable's texture (nothing to release here);
     // base removes the wrapper from m_renderTargets and nulls the pointer.
-    return ysDevice::DestroyRenderTarget(target);
+    YDS_NESTED_ERROR_CALL(ysDevice::DestroyRenderTarget(target));
+
+    return YDS_ERROR_RETURN(ysError::None);
 }
 
 ysError ysMetalDevice::SetRenderTarget(ysRenderTarget *target, int slot) {
@@ -623,7 +625,9 @@ ysError ysMetalDevice::DestroyGPUBuffer(ysGPUBuffer *&buffer) {
         metalBuffer->constantBuffer = nullptr;
     }
     // Base frees the RAM mirror and removes the wrapper from m_gpuBuffers (nulls buffer).
-    return ysDevice::DestroyGPUBuffer(buffer);
+    YDS_NESTED_ERROR_CALL(ysDevice::DestroyGPUBuffer(buffer));
+
+    return YDS_ERROR_RETURN(ysError::None);
 }
 
 ysError ysMetalDevice::CreateVertexShader(ysShader **newShader, const char *shaderFilename, const char *shaderName) {
@@ -686,7 +690,9 @@ ysError ysMetalDevice::DestroyShader(ysShader *&shader) {
         metalShader->m_shader->release();   // +1 from newLibrary()
         metalShader->m_shader = nullptr;
     }
-    return ysDevice::DestroyShader(shader);
+    YDS_NESTED_ERROR_CALL(ysDevice::DestroyShader(shader));
+
+    return YDS_ERROR_RETURN(ysError::None);
 }
 
 ysError ysMetalDevice::CreateShaderProgram(ysShaderProgram **newProgram) {
@@ -703,7 +709,9 @@ ysError ysMetalDevice::DestroyShaderProgram(ysShaderProgram *&shader, bool destr
     YDS_ERROR_DECLARE("DestroyShaderProgram");
     if (shader == nullptr) return YDS_ERROR_RETURN(ysError::None);
     // Base optionally destroys the attached shaders and removes the wrapper from the array.
-    return ysDevice::DestroyShaderProgram(shader, destroyShaders);
+    YDS_NESTED_ERROR_CALL(ysDevice::DestroyShaderProgram(shader, destroyShaders));
+
+    return YDS_ERROR_RETURN(ysError::None);
 }
 
 ysError ysMetalDevice::AttachShader(ysShaderProgram *program, ysShader *shader) {
@@ -808,7 +816,9 @@ ysError ysMetalDevice::UseInputLayout(ysInputLayout *layout) {
 ysError ysMetalDevice::DestroyInputLayout(ysInputLayout *&layout) {
     YDS_ERROR_DECLARE("DestroyInputLayout");
     if (layout == nullptr) return YDS_ERROR_RETURN(ysError::None);
-    return ysDevice::DestroyInputLayout(layout);
+    YDS_NESTED_ERROR_CALL(ysDevice::DestroyInputLayout(layout));
+
+    return YDS_ERROR_RETURN(ysError::None);
 }
 
 ysError ysMetalDevice::CreateTexture(ysTexture **texture, const char *fname) {
@@ -878,7 +888,9 @@ ysError ysMetalDevice::DestroyTexture(ysTexture *&texture) {
         metalTexture->m_texture->release();   // +1 from newTexture()
         metalTexture->m_texture = nullptr;
     }
-    return ysDevice::DestroyTexture(texture);
+    YDS_NESTED_ERROR_CALL(ysDevice::DestroyTexture(texture));
+
+    return YDS_ERROR_RETURN(ysError::None);
 }
 
 ysError ysMetalDevice::UseTexture(ysTexture *texture, int slot) {
