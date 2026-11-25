@@ -34,14 +34,11 @@ jobs:
         #   - FunctionTests.FunctionGaussianTest and SynthesizerTests.SynthesizerSystemTest*:
         #     pre-existing failures carried over from upstream engine-sim; the test
         #     expectations no longer match the Function / Synthesizer implementation.
-        #   - GasSystemTests.PressureEquilibriumMaxFlow*: the tests apply the flow with the
-        #     opposite sign to GasSystem::flow(); drop them from the filter once the test fix
-        #     ("Fix the sign convention in the pressure-equilibrium gas tests") is merged.
         run: |
           export PATH="$(brew --prefix bison)/bin:$(brew --prefix flex)/bin:$PATH"
           cmake --build build --target engine-sim-test -j3
           ./build/engine-sim-test --gtest_brief=1 \
-            '--gtest_filter=-FunctionTests.FunctionGaussianTest:SynthesizerTests.SynthesizerSystemTest*:GasSystemTests.PressureEquilibriumMaxFlow*'
+            '--gtest_filter=-FunctionTests.FunctionGaussianTest:SynthesizerTests.SynthesizerSystemTest*'
 
       - name: Package redline.app
         run: cmake --build build --target redline-app -j3

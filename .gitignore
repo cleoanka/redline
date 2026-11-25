@@ -29,3 +29,7 @@ compile_commands.json
 .vscode/
 .idea/
 *.swp
+
+# Engine switcher backups of a user's main.mr (main.mr.bak, main.mr.bak.N)
+assets/*.mr.bak
+assets/*.mr.bak.*
