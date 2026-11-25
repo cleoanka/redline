@@ -114,7 +114,9 @@ TEST(SynthesizerTests, SynthesizerSystemTestSingleThread) {
     Synthesizer synth;
     setupSynchronizedSynthesizer(synth);
 
-    int16_t *output = new int16_t[outputSamples];
+    // The loop below reads 16 samples per 16-sample input block, i.e. inputSamples in
+    // total (readAudioOutput always fills the requested count), so size for that.
+    int16_t *output = new int16_t[inputSamples];
     int totalSamples = 0;
 
     for (int i = 0; i < inputSamples;) {
