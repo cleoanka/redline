@@ -107,7 +107,12 @@ Minimal, keyboard-driven:
 
 > **Change the engine live** with **O** (previous) and **P** (next) — cycles through 16
 > built-in engines (Chevy 454 V8, Hayabusa I4, 2JZ I6, LFA V10, Merlin V12, radials, …).
-> No file editing. (`[` / `]` also work on a US keyboard.)
+> (`[` / `]` also work on a US keyboard.) Each switch **rewrites `assets/main.mr`** with the
+> chosen preset and hot-reloads it, so the last engine you picked is what loads next time.
+> If `main.mr` holds a script the switcher did not write (your own engine), it is first
+> copied to `main.mr.bak` (or `main.mr.bak.1`, `.2`, … if that name holds different
+> content); if that copy cannot be written, `main.mr` is left alone and the engine does not
+> change. The switcher needs a writable asset directory.
 
 ### Gamepad (Xbox controller)
 
@@ -136,6 +141,8 @@ grew a way to record itself — the app reads back its own Metal drawable:
 | `REDLINE_CAPTURE_FRAME=<n>` | which single frame (default 90) |
 | `REDLINE_CAPTURE_SEQ=start,stride,count` | dump a sequence → `<path>.000`, `.001`, … |
 | `REDLINE_AUTORUN=1` | crank + rev the engine unattended (for demos / captures) |
+| `REDLINE_CYCLE=<n>` | switch to the next engine every *n* frames (reload stress test; rewrites `main.mr`) |
+| `REDLINE_MAXFRAMES=<n>` | quit cleanly after *n* frames (headless / ASan runs) |
 
 All are no-ops unless set. The GIFs on this page are `REDLINE_AUTORUN=1` +
 `REDLINE_CAPTURE_SEQ` assembled with Pillow.

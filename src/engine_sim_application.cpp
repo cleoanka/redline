@@ -534,6 +534,22 @@ void EngineSimApplication::loadEngine(
         delete m_iceEngine;
     }
 
+    // A script can compile into an engine with no crankshaft or no exhaust system. The
+    // simulator then skips (0 cranks) or sizes to zero (0 exhausts) the synthesizer's input
+    // channels, and the audio rendering thread indexes channel 0 -> crash. Reject such an
+    // engine and fall through to the "<NO ENGINE>" path below instead.
+    if (engine != nullptr
+        && (engine->getCrankshaftCount() <= 0 || engine->getExhaustSystemCount() <= 0))
+    {
+        printf("[redline] engine '%s' has %d crankshaft(s) and %d exhaust system(s); not loaded\n",
+            engine->getName().c_str(), engine->getCrankshaftCount(), engine->getExhaustSystemCount());
+        fflush(stdout);
+
+        engine->destroy();
+        delete engine;
+        engine = nullptr;
+    }
+
     m_iceEngine = engine;
     m_vehicle = vehicle;
     m_transmission = transmission;
