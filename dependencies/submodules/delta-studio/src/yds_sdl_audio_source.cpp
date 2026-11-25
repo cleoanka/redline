@@ -62,9 +62,11 @@ ysError ysSdlAudioSource::UnlockBufferSegments(void *segment1, SampleOffset segm
 ysError ysSdlAudioSource::SetMode(Mode mode) {
     YDS_ERROR_DECLARE("SetMode");
 
-    YDS_NESTED_ERROR_CALL( ysAudioSource::SetMode(mode) );
-
-    // TODO
+    {
+        // m_bufferMode is read by AddToBuffer() on the SDL audio-callback thread.
+        std::lock_guard<std::mutex> guard(m_mutex);
+        YDS_NESTED_ERROR_CALL( ysAudioSource::SetMode(mode) );
+    }
 
     return YDS_ERROR_RETURN(ysError::None);
 }
@@ -128,6 +130,10 @@ void ysSdlAudioSource::AddToBuffer(int16_t *audio, int frames) {
     std::lock_guard<std::mutex> guard(m_mutex);
 
     if (frames <= 0 || m_bufferSize == 0 || m_dataBuffer == nullptr) return;
+
+    // Stopped: contribute silence and hold the read position (like a stopped DirectSound
+    // buffer), so the ring is not replayed while the app reloads and is not writing to it.
+    if (m_bufferMode == Mode::Stop) return;
     ysSdlAudioBuffer *sdlBuffer = static_cast<ysSdlAudioBuffer *>(m_dataBuffer);
     auto *buffer = (int16_t *)sdlBuffer->GetBuffer();
     if (buffer == nullptr) return;

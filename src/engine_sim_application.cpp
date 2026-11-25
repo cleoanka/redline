@@ -814,8 +814,11 @@ void EngineSimApplication::switchEngine(int direction) {
 
     m_enginePresetIndex = newIndex;
 
-    // Bracketing the reload with audio Stop/Loop keeps the audio thread from touching the
-    // engine while it is torn down and rebuilt.
+    // Bracketing the reload with audio Stop/Loop mutes the output source (silence, read
+    // position held) so the last second of the output ring is not replayed while the
+    // script reloads. It is not what keeps the engine safe: neither audio thread reads the
+    // engine (the SDL callback only reads the output ring, the synthesizer thread only its
+    // own input buffers, and it is joined by releaseSimulation() during the reload).
     if (m_audioSource != nullptr) m_audioSource->SetMode(ysAudioSource::Mode::Stop);
     loadScript();
     if (m_simulator.getEngine() != nullptr && m_audioSource != nullptr) {
