@@ -703,6 +703,60 @@ namespace {
         {"engines/atg-video-1/01_honda_trx520.mr",           "honda_trx520",               "Honda TRX520 V-twin"},
     };
     const int kEnginePresetCount = (int)(sizeof(kEnginePresets) / sizeof(kEnginePresets[0]));
+
+    // The exact main.mr the switcher writes for a preset.
+    std::string presetScript(const EnginePreset &preset) {
+        std::stringstream ss;
+        ss << "import \"engine_sim.mr\"\n"
+           << "import \"themes/default.mr\"\n"
+           << "import \"" << preset.import << "\"\n\n"
+           << "use_default_theme()\n"
+           << "set_engine(\n    " << preset.fn << "()\n)\n";
+        return ss.str();
+    }
+
+    bool readWholeFile(const std::string &path, std::string *contents) {
+        std::ifstream in(path, std::ios::in | std::ios::binary);
+        if (!in.is_open()) return false;
+        std::stringstream ss;
+        ss << in.rdbuf();
+        *contents = ss.str();
+        return true;
+    }
+
+    // Before the switcher overwrites main.mr, keep a copy of anything it did not write
+    // itself (a user's own script). Uses main.mr.bak, or main.mr.bak.N if that name is
+    // taken by different content, so an earlier backup is never overwritten either.
+    // Returns false if main.mr holds user content that could not be saved; the caller
+    // must then leave main.mr alone. *backupPath is set only when a new copy was made.
+    bool backupUserMainScript(const std::string &mainPath, std::string *backupPath) {
+        std::string current;
+        if (!readWholeFile(mainPath, &current)) return true;    // nothing to lose
+        for (int i = 0; i < kEnginePresetCount; ++i) {
+            if (current == presetScript(kEnginePresets[i])) return true;
+        }
+
+        for (int n = 0; n < 1000; ++n) {
+            const std::string candidate =
+                mainPath + ".bak" + ((n == 0) ? std::string() : "." + std::to_string(n));
+            std::string existing;
+            if (readWholeFile(candidate, &existing)) {
+                if (existing == current) return true;           // already backed up
+                continue;
+            }
+
+            std::ofstream out(candidate, std::ios::out | std::ios::binary);
+            if (!out.is_open()) return false;
+            out << current;
+            out.close();
+            if (!out) return false;
+
+            *backupPath = candidate;
+            return true;
+        }
+
+        return false;
+    }
 }
 
 void EngineSimApplication::switchEngine(int direction) {
@@ -713,19 +767,29 @@ void EngineSimApplication::switchEngine(int direction) {
     // Rewrite main.mr (in the asset path, so its relative imports resolve) with the chosen
     // engine, then reload. If the write fails (e.g. the app is on a read-only mount) do NOT
     // advance the index or claim success — loadScript would reload the OLD engine and the
-    // label would desync.
-    std::ofstream out(m_assetPath + "/main.mr", std::ios::out | std::ios::trunc);
+    // label would desync. A main.mr the switcher did not write (the user's own script) is
+    // copied aside first; if that copy cannot be made, main.mr is left untouched.
+    const std::string mainPath = m_assetPath + "/main.mr";
+    std::string backupPath;
+    if (!backupUserMainScript(mainPath, &backupPath)) {
+        if (m_infoCluster != nullptr) {
+            m_infoCluster->setLogMessage("Could not back up your main.mr — engine unchanged");
+        }
+        return;
+    }
+    if (!backupPath.empty()) {
+        printf("[redline] saved your main.mr as %s before switching engine\n", backupPath.c_str());
+        fflush(stdout);
+    }
+
+    std::ofstream out(mainPath, std::ios::out | std::ios::trunc);
     if (!out.is_open()) {
         if (m_infoCluster != nullptr) {
             m_infoCluster->setLogMessage("Could not write main.mr (read-only?) — engine unchanged");
         }
         return;
     }
-    out << "import \"engine_sim.mr\"\n"
-        << "import \"themes/default.mr\"\n"
-        << "import \"" << preset.import << "\"\n\n"
-        << "use_default_theme()\n"
-        << "set_engine(\n    " << preset.fn << "()\n)\n";
+    out << presetScript(preset);
     out.close();
 
     m_enginePresetIndex = newIndex;
@@ -741,7 +805,9 @@ void EngineSimApplication::switchEngine(int direction) {
     if (m_infoCluster != nullptr) {
         m_infoCluster->setLogMessage(
             "[" + std::to_string(m_enginePresetIndex + 1) + "/" + std::to_string(n) + "] "
-            + preset.name + "   (O / P to change engine)");
+            + preset.name + "   (O / P to change engine)"
+            + (backupPath.empty() ? std::string()
+                : "   [your main.mr saved as " + backupPath.substr(backupPath.find_last_of('/') + 1) + "]"));
     }
 }
 
