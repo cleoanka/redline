@@ -176,12 +176,21 @@ void EngineSimApplication::initialize() {
     m_outputAudioBuffer =
         m_engine.GetAudioDevice()->CreateBuffer(&params, 44100);
 
+    // CreateSource() returns nullptr when no audio output device could be opened (headless
+    // Mac, VM, remote session, busy CoreAudio). Run silent then instead of crashing: every
+    // m_audioSource use is guarded and process() discards the synthesizer output.
     m_audioSource = m_engine.GetAudioDevice()->CreateSource(m_outputAudioBuffer);
-    m_audioSource->SetMode((m_simulator.getEngine() != nullptr)
-        ? ysAudioSource::Mode::Loop
-        : ysAudioSource::Mode::Stop);
-    m_audioSource->SetPan(0.0f);
-    m_audioSource->SetVolume(1.0f);
+    if (m_audioSource != nullptr) {
+        m_audioSource->SetMode((m_simulator.getEngine() != nullptr)
+            ? ysAudioSource::Mode::Loop
+            : ysAudioSource::Mode::Stop);
+        m_audioSource->SetPan(0.0f);
+        m_audioSource->SetVolume(1.0f);
+    }
+    else {
+        printf("[redline] no audio output device available; running without sound\n");
+        fflush(stdout);
+    }
 
 #ifdef ATG_ENGINE_SIM_DISCORD_ENABLED
     // Create a global instance of discord-rpc
@@ -278,6 +287,17 @@ void EngineSimApplication::process(float frame_dt) {
     if (iterationCount > 0) {
         m_performanceCluster->addTimePerTimestepSample(
             (duration.count() / 1E9) / iterationCount);
+    }
+
+    if (m_audioSource == nullptr) {
+        // Silent mode (no output device): still drain the synthesizer so its render thread
+        // keeps consuming input blocks instead of stalling on a full output buffer.
+        int16_t discard[1024];
+        while (m_simulator.readAudioOutput(1024, discard) == 1024) { /* void */ }
+
+        m_performanceCluster->addInputBufferUsageSample(
+            (double)m_simulator.getSynthesizerInputLatency() / m_simulator.getSynthesizerInputLatencyTarget());
+        return;
     }
 
     const SampleOffset safeWritePosition = m_audioSource->GetCurrentWritePosition();
@@ -404,9 +424,9 @@ void EngineSimApplication::run() {
 
         if (m_engine.ProcessKeyDown(ysKey::Code::Return)
                 || m_gamepad.wasPressed(GamepadInput::Button::Y)) {
-            m_audioSource->SetMode(ysAudioSource::Mode::Stop);
+            if (m_audioSource != nullptr) m_audioSource->SetMode(ysAudioSource::Mode::Stop);
             loadScript();
-            if (m_simulator.getEngine() != nullptr) {
+            if (m_simulator.getEngine() != nullptr && m_audioSource != nullptr) {
                 m_audioSource->SetMode(ysAudioSource::Mode::Loop);
             }
         }

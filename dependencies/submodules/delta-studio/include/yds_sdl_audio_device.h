@@ -24,7 +24,10 @@ private:
 
 private:
     SDL_AudioDeviceID m_deviceId;
-    SDL_AudioSpec m_outputFormat;
+    // Value-initialized: when SDL_OpenAudioDevice fails the device stays listed with
+    // m_deviceId == 0 and this zeroed format, so CreateSource() reliably returns nullptr
+    // instead of comparing against indeterminate values.
+    SDL_AudioSpec m_outputFormat{};
 };
 
 #endif /* YDS_SDL_AUDIO_DEVICE_H */
