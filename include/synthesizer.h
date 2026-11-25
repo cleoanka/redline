@@ -118,7 +118,6 @@ class Synthesizer {
         std::atomic<bool> m_run;
         bool m_processed;
 
-        std::mutex m_inputLock;
         std::mutex m_lock0;
         std::condition_variable m_cv0;
 

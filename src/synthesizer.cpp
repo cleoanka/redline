@@ -209,7 +209,10 @@ void Synthesizer::writeInput(const double *data) {
 }
 
 void Synthesizer::endInputBlock() {
-    std::unique_lock<std::mutex> lk(m_inputLock); 
+    // Same mutex as the render thread's wait predicate, which reads m_processed and the
+    // input ring buffers: updating them under another lock races with that read and can
+    // lose this notification.
+    std::unique_lock<std::mutex> lk(m_lock0);
 
     for (int i = 0; i < m_inputChannelCount; ++i) {
         m_inputChannels[i].Data.removeBeginning(m_inputSamplesRead);
