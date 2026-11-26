@@ -45,6 +45,37 @@ bison_target(
 add_flex_bison_dependency(lexer parser)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+# The generated scanner must be compiled against the FlexLexer.h shipped with the
+# same flex that generated it (newer flex releases change yyFlexLexer's members).
+# Use the header installed next to FLEX_EXECUTABLE (<prefix>/include); macOS's
+# /usr/bin/flex is an xcrun shim, so resolve it to the toolchain flex first.
+# Otherwise fall back to the vendored 2.6.4 header. Only FlexLexer.h is copied,
+# so no other headers from that prefix leak into the include path.
+set(PIRANHA_FLEX_REAL "${FLEX_EXECUTABLE}")
+if (APPLE AND FLEX_EXECUTABLE STREQUAL "/usr/bin/flex")
+    execute_process(
+        COMMAND xcrun -f flex
+        OUTPUT_VARIABLE PIRANHA_XCRUN_FLEX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+    if (PIRANHA_XCRUN_FLEX)
+        set(PIRANHA_FLEX_REAL "${PIRANHA_XCRUN_FLEX}")
+    endif()
+endif()
+get_filename_component(PIRANHA_FLEX_REAL "${PIRANHA_FLEX_REAL}" REALPATH)
+get_filename_component(PIRANHA_FLEX_PREFIX "${PIRANHA_FLEX_REAL}" DIRECTORY)
+get_filename_component(PIRANHA_FLEX_PREFIX "${PIRANHA_FLEX_PREFIX}" DIRECTORY)
+if (EXISTS "${PIRANHA_FLEX_PREFIX}/include/FlexLexer.h")
+    configure_file(
+        "${PIRANHA_FLEX_PREFIX}/include/FlexLexer.h"
+        "${CMAKE_CURRENT_BINARY_DIR}/flex-include/FlexLexer.h"
+        COPYONLY)
+    include_directories(${CMAKE_CURRENT_BINARY_DIR}/flex-include)
+    message(STATUS "piranha: using FlexLexer.h from ${PIRANHA_FLEX_PREFIX}/include")
+else()
+    message(STATUS "piranha: using vendored FlexLexer.h")
+endif()
 include_directories(dependencies/libraries/flex/include)
 include_directories(include)
 
